@@ -57,6 +57,9 @@ own people walk through it, raiders have to break it down. Raiders try to walk a
 walls, but once they stop making progress for a few seconds they commit and smash
 straight through, so a sealed ring buys time rather than safety.
 
+Villagers with no job walk over and **repair** battle damage for free, so a big, happy
+population is what keeps the town standing between raids.
+
 Villagers arrive on their own while you have spare housing. Each one picks the nearest unstaffed
 farm, mill or mine and works it. They have three needs — **food, energy, fun** — and their happiness
 sets how fast they work (50 % to 100 %). They eat from the town food stock, sleep in houses at night,

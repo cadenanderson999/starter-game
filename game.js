@@ -214,7 +214,11 @@ function tryBuild(type, gx, gy) {
 }
 function removeBuilding(b, reason) {
   S.buildings = S.buildings.filter(x => x !== b);
-  for (const v of S.villagers) { if (v.job === b.id) { v.job = null; if (v.state === 'working' || v.state === 'toWork') v.state = 'idle'; } if (v.home === b.id) v.home = null; }
+  for (const v of S.villagers) {
+    if (v.job === b.id) { v.job = null; if (v.state === 'working' || v.state === 'toWork') v.state = 'idle'; }
+    if (v.fix === b.id) { v.fix = null; if (v.state === 'fixing' || v.state === 'toFix') v.state = 'idle'; }
+    if (v.home === b.id) v.home = null;
+  }
   rebuildGrid();
   if (selected && selected.kind === 'building' && selected.id === b.id) selected = null;
   if (reason === 'destroyed' && !DEFS[b.type].tree) {
@@ -265,6 +269,17 @@ function findJob(v) {
   for (const t of PROD_TYPES) { const b = nearestOf(v, ofType(t), b => !taken.has(b.id)); if (b) { const d = rectDist(v, b); if (d < bd) { bd = d; best = b; } } }
   return best;
 }
+// Spare villagers patch up battle damage for free, slowly. It gives a big
+// population a point beyond eating, and rewards keeping people housed and happy.
+function findRepair(v) {
+  const taken = new Set(); for (const o of S.villagers) if (o !== v && o.fix != null) taken.add(o.fix);
+  let best = null, bd = 1e9;
+  for (const b of S.buildings) {
+    if (DEFS[b.type].tree || b.hp >= b.maxhp || taken.has(b.id)) continue;
+    const d = rectDist(v, b); if (d < bd) { bd = d; best = b; }
+  }
+  return best;
+}
 function goHome(v) {
   const h = nearestOf(v, ofType('house')) || hall();
   v.home = h ? h.id : null; v.state = 'toHome';
@@ -275,7 +290,7 @@ function updateVillager(v, dt) {
   v.fun = clamp(v.fun - 0.25 * dt, 0, 100);
   if (v.state !== 'sleeping') v.energy = clamp(v.energy - 0.45 * dt, 0, 100);
   if (v.hunger >= 60 && S.res.food >= 5) { S.res.food -= 5; v.hunger = clamp(v.hunger - 70, 0, 100); }
-  if (night && v.state !== 'sleeping' && v.state !== 'toHome') goHome(v);
+  if (night && v.state !== 'sleeping' && v.state !== 'toHome') { v.fix = null; goHome(v); }
   const tavern = () => nearestOf(v, ofType('tavern'));
   const ox = v.x, oy = v.y;
   switch (v.state) {
@@ -284,6 +299,8 @@ function updateVillager(v, dt) {
       if (v.fun < 25 && tavern()) { v.state = 'toFun'; break; }
       if (v.job == null || !bld(v.job)) { v.jt = (v.jt || 0) - dt; if (v.jt <= 0) { v.jt = 1.5; const j = findJob(v); v.job = j ? j.id : null; } }
       if (v.job != null) { v.state = 'toWork'; break; }
+      v.rt = (v.rt || 0) - dt;
+      if (v.rt <= 0) { v.rt = 2; const r = findRepair(v); if (r) { v.fix = r.id; v.state = 'toFix'; break; } }
       v.wt -= dt;
       if (v.tx == null || v.wt <= 0) {
         const p = door(hall());
@@ -293,6 +310,19 @@ function updateVillager(v, dt) {
       break;
     }
     case 'toWork': { const b = bld(v.job); if (!b) { v.state = 'idle'; break; } const p = door(b); if (moveTowardSolid(v, p.x, p.y, 1.6, dt)) v.state = 'working'; break; }
+    case 'toFix': {
+      const b = bld(v.fix);
+      if (!b || b.hp >= b.maxhp) { v.fix = null; v.state = 'idle'; break; }
+      const p = door(b); if (moveTowardSolid(v, p.x, p.y, 1.7, dt)) v.state = 'fixing';
+      break;
+    }
+    case 'fixing': {
+      const b = bld(v.fix);
+      if (!b || b.hp >= b.maxhp) { if (b) fx(b.gx + b.w / 2, b.gy, 'repaired', '#7fcf6a', 1); v.fix = null; v.state = 'idle'; break; }
+      b.hp = Math.min(b.maxhp, b.hp + 1.6 * productivity(v) * dt);
+      if (v.energy < 15) { v.fix = null; goHome(v); }
+      break;
+    }
     case 'working': {
       const b = bld(v.job); if (!b) { v.state = 'idle'; break; }
       S.res[DEFS[b.type].prod] += DEFS[b.type].rate * productivity(v) * dt;
@@ -1154,7 +1184,7 @@ function draw() {
       const fl = Math.max(e.flash || 0, e.flash2 || 0);
       if (fl > now) flashOver(img, e.x, e.y + 0.45, e.face === -1, 0.7 * (fl - now) / 110);
       if (it.kind === 'villager') {
-        const bubble = e.state === 'working' ? '💪' : e.state === 'fun' ? '🎶' : e.hunger > 80 ? '🍽️' : (e.state === 'toHome' && !isNight()) ? '😴' : null;
+        const bubble = e.state === 'working' ? '💪' : e.state === 'fixing' ? '🔨' : e.state === 'fun' ? '🎶' : e.hunger > 80 ? '🍽️' : (e.state === 'toHome' && !isNight()) ? '😴' : null;
         if (bubble) { const [sx, sy] = W2S(e.x, e.y); ctx.font = '12px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(bubble, sx + 12, sy - 24); }
         if (selected && selected.kind === 'villager' && selected.id === e.id) ringAt(e.x, e.y, 20);
       } else if (it.kind === 'hero') {
@@ -1318,8 +1348,9 @@ function selectionHTML() {
   if (selected.kind === 'villager') {
     const v = S.villagers.find(x => x.id === selected.id); if (!v) { selected = null; return selectionHTML(); }
     const job = bld(v.job);
-    const st = { idle: 'wandering', toWork: 'heading to work', working: 'working', toHome: 'going home', sleeping: 'sleeping', toFun: 'off to the tavern', fun: 'having fun' }[v.state];
-    return `<div class="t">🧑‍🌾 ${v.name}</div><div class="m">${st}${job ? ` · ${DEFS[job.type].name}` : ' · unemployed'}</div>` +
+    const st = { idle: 'wandering', toWork: 'heading to work', working: 'working', toHome: 'going home', sleeping: 'sleeping', toFun: 'off to the tavern', fun: 'having fun', toFix: 'off to make repairs', fixing: 'repairing' }[v.state];
+    const fixing = bld(v.fix);
+    return `<div class="t">🧑‍🌾 ${v.name}</div><div class="m">${st}${fixing ? ` · ${DEFS[fixing.type].name}` : job ? ` · ${DEFS[job.type].name}` : ' · unemployed'}</div>` +
       needBar('🍞', 100 - v.hunger) + needBar('⚡', v.energy) + needBar('🎉', v.fun) +
       `<div class="m">Happiness ${Math.round(happiness(v))}% → works at ${Math.round(productivity(v) * 100)}%</div>`;
   }
