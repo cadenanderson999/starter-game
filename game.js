@@ -190,7 +190,7 @@ function tryBuild(type, gx, gy) {
   if ((d.th || 1) > S.thLevel) return toast(`Needs Town Hall level ${d.th}`);
   if (!canAfford(d.cost)) return toast('Not enough resources');
   if (!canPlace(type, gx, gy)) return;
-  pay(d.cost); const b = addBuilding(type, gx, gy); paintDirt(b);
+  pay(d.cost); const b = addBuilding(type, gx, gy); markDirt(b);
   blip(440, 0.05);
 }
 function removeBuilding(b, reason) {
@@ -663,19 +663,29 @@ function figure(g, o) {            // generic 16x16 humanoid; o = {skin, hair, s
 }
 const SPR = {};
 function buildSprites() {
-  const G = ['#5d9b3c', '#589637', '#62a141', '#5a9a3a'];
+  const G = new Array(8).fill('#5d9b3c');
   SPR.grass = G.map((c, i) => mk(PX, PX, g => {
     R(g, 0, 0, PX, PX, c);
-    for (let k = 0; k < 10; k++) P(g, Math.floor(rnd(0, PX)), Math.floor(rnd(0, PX)), shade(c, 0.86));
-    for (let k = 0; k < 5; k++) { const x = Math.floor(rnd(0, PX)), y = Math.floor(rnd(1, PX)); P(g, x, y, shade(c, 1.15)); P(g, x, y - 1, shade(c, 1.25)); }
-    if (i === 3) { P(g, 4, 5, '#f4f0d0'); P(g, 11, 10, '#f0d060'); P(g, 12, 3, '#e8e8f8'); }
+    for (let k = 0; k < 9; k++) P(g, Math.floor(rnd(0, PX)), Math.floor(rnd(0, PX)), shade(c, 0.88));
+    for (let k = 0; k < 5; k++) { const x = Math.floor(rnd(0, PX)), y = Math.floor(rnd(1, PX)); P(g, x, y, shade(c, 1.12)); P(g, x, y - 1, shade(c, 1.2)); }
+    if (i === 5) { const x = Math.floor(rnd(3, 12)), y = Math.floor(rnd(3, 12)); P(g, x, y, ['#f0d868', '#e8e4f0', '#e090b0'][Math.floor(rnd(0, 3))]); P(g, x, y + 1, shade(c, 0.8)); }
   }));
-  const D = ['#8a5a3a', '#875737', '#8d5d3d'];
-  SPR.dirt = D.map(c => mk(PX, PX, g => {
+  const D = new Array(6).fill('#8a5a3a');
+  SPR.dirt = D.map((c, i) => mk(PX, PX, g => {
     R(g, 0, 0, PX, PX, c);
-    for (let k = 0; k < 12; k++) P(g, Math.floor(rnd(0, PX)), Math.floor(rnd(0, PX)), shade(c, 0.88));
-    for (let k = 0; k < 6; k++) P(g, Math.floor(rnd(0, PX)), Math.floor(rnd(0, PX)), shade(c, 1.12));
-    if (Math.random() < 0.5) { const x = Math.floor(rnd(2, 13)), y = Math.floor(rnd(2, 13)); R(g, x, y, 2, 1, '#a08a78'); P(g, x, y + 1, '#7a6a5a'); }
+    for (let k = 0; k < 14; k++) P(g, Math.floor(rnd(0, PX)), Math.floor(rnd(0, PX)), shade(c, 0.88));
+    for (let k = 0; k < 7; k++) P(g, Math.floor(rnd(0, PX)), Math.floor(rnd(0, PX)), shade(c, 1.1));
+    if (i === 0) { const x = Math.floor(rnd(2, 12)), y = Math.floor(rnd(3, 12));   // patch of paler, drier soil
+      for (let k = 0; k < 14; k++) P(g, x + Math.floor(rnd(0, 4)), y + Math.floor(rnd(-2, 3)), shade(c, 1.16)); }
+    if (i === 1) { const y = Math.floor(rnd(4, 11)), x0 = Math.floor(rnd(0, 8)), len = Math.floor(rnd(5, 9));   // short cart rut
+      for (let x = x0; x < Math.min(PX, x0 + len); x++) { P(g, x, y + (x % 5 === 0 ? 1 : 0), shade(c, 0.82)); P(g, x, y - 1 + (x % 5 === 0 ? 1 : 0), shade(c, 1.06)); } }
+    if (i === 2) { const x = Math.floor(rnd(2, 12)), y = Math.floor(rnd(2, 12));    // pebble with shadow
+      R(g, x, y, 2, 1, '#a8968a'); P(g, x, y - 1, '#c0b0a4'); R(g, x, y + 1, 2, 1, '#6e5c4e'); }
+    if (i === 3) { for (let k = 0; k < 3; k++) { const x = Math.floor(rnd(1, 14)), y = Math.floor(rnd(1, 14)); P(g, x, y, '#6e5442'); P(g, x + 1, y, '#96745a'); } }
+    if (i === 4) { const x = Math.floor(rnd(3, 10)), y = Math.floor(rnd(3, 10));    // tuft of weeds clinging on
+      P(g, x, y, '#4a7a34'); P(g, x, y - 1, '#5a8a3c'); P(g, x + 1, y, '#3f6a2c'); P(g, x + 1, y - 2, '#5a8a3c'); }
+    if (i === 5) { const x = Math.floor(rnd(2, 11)), y = Math.floor(rnd(4, 12));    // crack
+      for (let k = 0; k < 5; k++) P(g, x + k, y + (k % 3 === 1 ? 1 : 0), shade(c, 0.74)); }
   }));
   SPR.tree = [0, 1, 2].map(v => mk(PX, 24, g => {
     const col = ['#2f6b34', '#35743a', '#2a6230'][v];
@@ -787,29 +797,101 @@ function buildSprites() {
 }
 
 // ---------------------------------------------------------------- ground (prerendered, world-sized)
+// Terrain is a grass field with dirt patches. Dirt tiles are drawn through an
+// irregular alpha mask keyed on their eight neighbours, so clearings get soft,
+// hand-drawn looking edges instead of hard square blocks.
 const ground = document.createElement('canvas'); ground.width = COLS * PX; ground.height = ROWS * PX;
 const gctx = ground.getContext('2d');
+const tileBuf = document.createElement('canvas'); tileBuf.width = PX; tileBuf.height = PX;
+const tbx = tileBuf.getContext('2d');
+let dirtGrid = null;
+const maskCache = new Map(), rimCache = new Map();
+const C = (g, x, y, w, h) => g.clearRect(x, y, w, h);
+function dirtMask(code, variant) {
+  const key = code * 4 + variant;
+  let m = maskCache.get(key); if (m) return m;
+  let seed = (key * 2654435761) >>> 0;
+  const rr = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+  const N = code & 1, E = code & 2, Sb = code & 4, W = code & 8, NE = code & 16, SE = code & 32, SW = code & 64, NW = code & 128;
+  m = mk(PX, PX, g => {
+    R(g, 0, 0, PX, PX, '#fff');
+    if (!N) for (let x = 0; x < PX; x++) C(g, x, 0, 1, 1 + Math.floor(rr() * 3));
+    if (!Sb) for (let x = 0; x < PX; x++) { const d = 1 + Math.floor(rr() * 3); C(g, x, PX - d, 1, d); }
+    if (!W) for (let y = 0; y < PX; y++) C(g, 0, y, 1 + Math.floor(rr() * 3), 1);
+    if (!E) for (let y = 0; y < PX; y++) { const d = 1 + Math.floor(rr() * 3); C(g, PX - d, y, d, 1); }
+    const corner = (cx, cy, a, b, diag) => {
+      if (!a && !b) { const r = 4 + Math.floor(rr() * 3); for (let y = 0; y < r + 2; y++) for (let x = 0; x < r + 2; x++) if (x + y < r + Math.floor(rr() * 2)) C(g, cx ? PX - 1 - x : x, cy ? PX - 1 - y : y, 1, 1); }
+      else if (a && b && !diag) { const r = 2 + Math.floor(rr() * 2); for (let y = 0; y < r; y++) for (let x = 0; x < r; x++) if (x + y < r) C(g, cx ? PX - 1 - x : x, cy ? PX - 1 - y : y, 1, 1); }
+    };
+    corner(0, 0, N, W, NW); corner(1, 0, N, E, NE); corner(0, 1, Sb, W, SW); corner(1, 1, Sb, E, SE);
+  });
+  maskCache.set(key, m); return m;
+}
+// The 1px band of dirt pixels that touch grass: a soft shadow, with occasional
+// tufts of grass flopping over the lip. Derived from the mask, so it follows the
+// same jitter and never draws along an interior tile seam.
+function dirtRim(code, variant) {
+  const key = code * 4 + variant;
+  let r = rimCache.get(key); if (r) return r;
+  const src = dirtMask(code, variant).getContext('2d').getImageData(0, 0, PX, PX).data;
+  const op = (x, y) => (x < 0 || y < 0 || x >= PX || y >= PX) ? true : src[(y * PX + x) * 4 + 3] > 0;
+  let seed = (key * 40503 + 12345) >>> 0;
+  const rr = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+  r = mk(PX, PX, g => {
+    for (let y = 0; y < PX; y++) for (let x = 0; x < PX; x++) {
+      if (!op(x, y) || (op(x, y - 1) && op(x + 1, y) && op(x, y + 1) && op(x - 1, y))) continue;
+      const t = rr();
+      if (t < 0.14) { P(g, x, y, '#4a8a34'); if (rr() < 0.5 && op(x, y + 1)) P(g, x, y + 1, '#3f7a2c'); }
+      else { P(g, x, y, 'rgba(52,30,14,.5)'); if (t > 0.8 && op(x, y + 1)) P(g, x, y + 1, 'rgba(52,30,14,.22)'); }
+    }
+  });
+  rimCache.set(key, r); return r;
+}
+const isDirt = (x, y) => (x < 0 || y < 0 || x >= COLS || y >= ROWS) ? 1 : dirtGrid[y][x];
+const hash2 = (x, y) => (((x * 73856093) ^ (y * 19349663) ^ ((x + y) * 83492791)) >>> 0);
+function paintTile(x, y) {
+  const v = hash2(x, y) % 8;
+  gctx.drawImage(SPR.grass[v], x * PX, y * PX);
+  if (!dirtGrid[y][x]) {
+    const hsh = hash2(y, x) % 1000;
+    if (hsh < 70 && !(grid && grid[y][x])) gctx.drawImage(SPR.decor[hsh % 4], x * PX, y * PX);
+    return;
+  }
+  const code = isDirt(x, y - 1) | (isDirt(x + 1, y) << 1) | (isDirt(x, y + 1) << 2) | (isDirt(x - 1, y) << 3) |
+    (isDirt(x + 1, y - 1) << 4) | (isDirt(x + 1, y + 1) << 5) | (isDirt(x - 1, y + 1) << 6) | (isDirt(x - 1, y - 1) << 7);
+  tbx.globalCompositeOperation = 'source-over'; tbx.clearRect(0, 0, PX, PX);
+  tbx.drawImage(SPR.dirt[(hash2(y, x) >>> 3) % 6], 0, 0);
+  const variant = (hash2(x, y) >>> 5) % 4;
+  tbx.globalCompositeOperation = 'destination-in';
+  tbx.drawImage(dirtMask(code, variant), 0, 0);
+  tbx.globalCompositeOperation = 'source-over';
+  tbx.drawImage(dirtRim(code, variant), 0, 0);
+  gctx.drawImage(tileBuf, x * PX, y * PX);
+}
+function repaintRegion(x0, y0, x1, y1) {
+  for (let y = Math.max(0, y0); y <= Math.min(ROWS - 1, y1); y++)
+    for (let x = Math.max(0, x0); x <= Math.min(COLS - 1, x1); x++) paintTile(x, y);
+}
+function markDirt(b, repaint = true) {
+  const m = b.type === 'wall' ? 0 : 1;
+  for (let y = b.gy - m; y < b.gy + b.h + m; y++) for (let x = b.gx - m; x < b.gx + b.w + m; x++) {
+    if (x < 0 || y < 0 || x >= COLS || y >= ROWS) continue;
+    const inside = x >= b.gx && x < b.gx + b.w && y >= b.gy && y < b.gy + b.h;
+    if (!inside && ((x * 7 + y * 11 + b.id) % 5) < 2) continue;
+    const t = grid[y][x]; if (!inside && t && t.type === 'tree') continue;
+    dirtGrid[y][x] = 1;
+  }
+  if (repaint) repaintRegion(b.gx - m - 1, b.gy - m - 1, b.gx + b.w + m, b.gy + b.h + m);
+}
 function paintGround() {
+  dirtGrid = Array.from({ length: ROWS }, () => new Uint8Array(COLS));
   const th = hall(); const c = th ? center(th) : { x: COLS / 2, y: ROWS / 2 };
   for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) {
     const d = Math.hypot(x + 0.5 - c.x, y + 0.5 - c.y);
-    const dirt = d < 5.5 + Math.sin(x * 1.7) * 0.8 + Math.cos(y * 2.1) * 0.8;
-    const v = (x * 7 + y * 13 + (x * y) % 5) % 4;
-    gctx.drawImage(dirt ? SPR.dirt[v % 3] : SPR.grass[v], x * PX, y * PX);
-    const hsh = (((x * 73856093) ^ (y * 19349663)) >>> 0) % 1000;
-    if (!dirt && hsh < 70 && !grid[y][x]) gctx.drawImage(SPR.decor[hsh % 4], x * PX, y * PX);
+    if (d < 5.5 + Math.sin(x * 1.7) * 0.8 + Math.cos(y * 2.1) * 0.8) dirtGrid[y][x] = 1;
   }
-  for (const b of S.buildings) if (!DEFS[b.type].tree) paintDirt(b);
-}
-function paintDirt(b) {
-  const margin = b.type === 'wall' ? 0 : 1;   // walls stay on grass; other buildings wear a ragged dirt apron
-  for (let y = b.gy - margin; y < b.gy + b.h + margin; y++) for (let x = b.gx - margin; x < b.gx + b.w + margin; x++) {
-    if (x < 0 || y < 0 || x >= COLS || y >= ROWS) continue;
-    const t = grid[y][x]; if (t && t.type === 'tree') continue;
-    const inside = x >= b.gx && x < b.gx + b.w && y >= b.gy && y < b.gy + b.h;
-    if (!inside && ((x * 7 + y * 11 + b.id) % 5) < 2) continue;
-    gctx.drawImage(SPR.dirt[(x * 3 + y * 5) % 3], x * PX, y * PX);
-  }
+  for (const b of S.buildings) if (!DEFS[b.type].tree) markDirt(b, false);
+  repaintRegion(0, 0, COLS - 1, ROWS - 1);
 }
 
 // ---------------------------------------------------------------- rendering
