@@ -192,6 +192,7 @@ function tryBuild(type, gx, gy) {
   if (!canAfford(d.cost)) return toast('Not enough resources');
   if (!canPlace(type, gx, gy)) return;
   pay(d.cost); const b = addBuilding(type, gx, gy); markDirt(b);
+  burst(gx + d.w / 2, gy + d.h - 0.2, 10, '#c8a882');
   blip(440, 0.05);
 }
 function removeBuilding(b, reason) {
@@ -205,7 +206,7 @@ function removeBuilding(b, reason) {
     if (b.type === 'hall') gameOver();
   }
 }
-function damageBuilding(b, dmg) { b.hp -= dmg; if (b.hp <= 0) removeBuilding(b, 'destroyed'); }
+function damageBuilding(b, dmg) { b.hp -= dmg; b.flash = performance.now() + 110; if (b.hp <= 0) removeBuilding(b, 'destroyed'); }
 function demolishBuilding(b) {
   if (b.type === 'hall') return toast('You cannot demolish the Town Hall');
   if (b.type === 'tree') { S.res.wood += 6; S.chopped = (S.chopped || 0) + 1; fx(b.gx + 0.5, b.gy + 0.3, '+🪵6', '#e8c060'); burst(b.gx + 0.5, b.gy + 0.5, 8, '#3a8a3a'); removeBuilding(b, 'chopped'); blip(300, 0.05); return; }
@@ -339,7 +340,7 @@ function pickTarget(m) {
   return best;
 }
 function damageMob(m, dmg, byUnit) {
-  m.hp -= dmg; if (byUnit) m.attacker = byUnit;
+  m.hp -= dmg; m.flash = performance.now() + 110; if (byUnit) m.attacker = byUnit;
   fx(m.x, m.y - 0.5, `-${Math.round(dmg)}`, '#ffd166', 0.6);
   if (m.hp <= 0) {
     S.mobs = S.mobs.filter(x => x !== m);
@@ -448,7 +449,7 @@ function updateBarracks(b, dt) {
   }
 }
 function hitUnit(u, dmg) {
-  u.hp -= dmg; fx(u.x, u.y - 0.5, `-${Math.round(dmg)}`, '#ff8080', 0.5);
+  u.hp -= dmg; u.flash2 = performance.now() + 110; fx(u.x, u.y - 0.5, `-${Math.round(dmg)}`, '#ff8080', 0.5);
   if (u.hp <= 0) {
     if (u === S.hero) { u.dead = 15; u.hp = 0; log('🤠 The Mayor fell! Recovering at the Town Hall…'); }
     else { S.soldiers = S.soldiers.filter(s => s !== u); log('💂 A soldier has fallen.'); }
@@ -850,6 +851,19 @@ function buildSprites() {
   SPR.bullet = mk(4, 2, g => { R(g, 0, 0, 3, 2, '#ffe070'); P(g, 3, 0, '#fff8d0'); });
 }
 
+const FLASH = { map: new Map() };
+function whiteOf(img) {
+  let w = FLASH.map.get(img);
+  if (!w) { w = mk(img.width, img.height, g => { g.drawImage(img, 0, 0); g.globalCompositeOperation = 'source-in'; g.fillStyle = '#fff'; g.fillRect(0, 0, img.width, img.height); }); FLASH.map.set(img, w); }
+  return w;
+}
+function flashOver(img, wx, wy, flip, alpha) {
+  const w = whiteOf(img), [sx, sy] = W2S(wx, wy), dw = img.width * SCALE, dh = img.height * SCALE;
+  ctx.globalAlpha = alpha;
+  if (flip) { ctx.save(); ctx.translate(sx, 0); ctx.scale(-1, 1); ctx.drawImage(w, -dw / 2, sy - dh, dw, dh); ctx.restore(); }
+  else ctx.drawImage(w, sx - dw / 2, sy - dh, dw, dh);
+  ctx.globalAlpha = 1;
+}
 function buildShadows() {
   SHADOW.map = new Map();
   for (const t of ['house', 'farm', 'mill', 'mine', 'wall', 'tower', 'barracks', 'tavern', 'hall', 'tree', 'prop']) {
@@ -1021,6 +1035,7 @@ function light(x, y, r, strength) {
 }
 function ringAt(wx, wy, r) { const [sx, sy] = W2S(wx, wy); ctx.strokeStyle = '#f2c14e'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(sx, sy, r, 0, Math.PI * 2); ctx.stroke(); }
 function draw() {
+  const now = performance.now();
   ctx.imageSmoothingEnabled = false;
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   if (shakeT > 0) ctx.translate(Math.round(rnd(-shakeMag, shakeMag)), Math.round(rnd(-shakeMag, shakeMag)));
@@ -1074,6 +1089,7 @@ function draw() {
       const b = it.b, sp = SPR[b.type], img = Array.isArray(sp) ? sp[b.v % sp.length] : sp;
       castShadow(img, b.gx + b.w / 2, b.gy + b.h, b.type === 'tree' ? 0.22 : 0.26);
       spr(img, b.gx + b.w / 2, b.gy + b.h, img.width, img.height, false);
+      if (b.flash > now) flashOver(img, b.gx + b.w / 2, b.gy + b.h, false, 0.55 * (b.flash - now) / 110);
       if (b.type === 'hall') { const [sx, sy] = W2S(b.gx, b.gy); ctx.fillStyle = '#fff'; ctx.font = 'bold 11px monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText('Lv' + S.thLevel, sx + 4, sy + 4); }
       if (b.hp < b.maxhp && b.type !== 'tree') hpBar(b.gx + b.w / 2, b.gy + b.h - 0.25, b.w * TS - 10, b.hp / b.maxhp, b.hp / b.maxhp > 0.4 ? '#6fcf7a' : '#ef6b6b');
       if (selected && selected.kind === 'building' && selected.id === b.id) { const [sx, sy] = W2S(b.gx, b.gy); ctx.strokeStyle = '#f2c14e'; ctx.lineWidth = 2; ctx.strokeRect(sx - 1, sy - 1, b.w * TS + 2, b.h * TS + 2); }
@@ -1083,6 +1099,8 @@ function draw() {
       const [shx, shy] = W2S(e.x, e.y + 0.4), sr = it.kind === 'king' ? 20 : it.kind === 'troll' ? 15 : 10;
       ctx.fillStyle = 'rgba(0,0,0,.26)'; ctx.beginPath(); ctx.ellipse(shx, shy, sr, sr * 0.4, 0, 0, Math.PI * 2); ctx.fill();
       spr(img, e.x, e.y + 0.45, img.width, img.height, e.face === -1);
+      const fl = Math.max(e.flash || 0, e.flash2 || 0);
+      if (fl > now) flashOver(img, e.x, e.y + 0.45, e.face === -1, 0.7 * (fl - now) / 110);
       if (it.kind === 'villager') {
         const bubble = e.state === 'working' ? '💪' : e.state === 'fun' ? '🎶' : e.hunger > 80 ? '🍽️' : (e.state === 'toHome' && !isNight()) ? '😴' : null;
         if (bubble) { const [sx, sy] = W2S(e.x, e.y); ctx.font = '12px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(bubble, sx + 12, sy - 24); }
@@ -1320,7 +1338,10 @@ function frame(now) {
   if (S) {
     if (!paused) { const dt = raw * speed; const steps = Math.ceil(dt / 0.05); for (let i = 0; i < steps; i++) update(dt / steps); }
     const k = 1 - Math.exp(-6 * raw); const vw = canvas.width / TS, vh = canvas.height / TS;
-    if (S.hero.dead <= 0) { cam.x += (S.hero.x - cam.x) * k; cam.y += (S.hero.y - cam.y) * k; }
+    if (S.hero.dead <= 0) {
+      const ldx = clamp((mouseW.x - S.hero.x) * 0.22, -2.2, 2.2), ldy = clamp((mouseW.y - S.hero.y) * 0.22, -2.2, 2.2);
+      cam.x += (S.hero.x + ldx - cam.x) * k; cam.y += (S.hero.y + ldy - cam.y) * k;
+    }
     cam.x = clamp(cam.x, Math.min(vw / 2, COLS / 2), Math.max(COLS - vw / 2, COLS / 2)); cam.y = clamp(cam.y, Math.min(vh / 2, ROWS / 2), Math.max(ROWS - vh / 2, ROWS / 2));
     if (shakeT > 0) { shakeT -= raw; if (shakeT <= 0) shakeMag = 0; }
     uiTimer += raw; if (uiTimer > 0.25) { uiTimer = 0; updateUI(); }
