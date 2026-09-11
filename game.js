@@ -1157,6 +1157,26 @@ function draw() {
   ctx.font = 'bold 13px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   for (const f of S.fx) { const [sx, sy] = W2S(f.x, f.y); ctx.globalAlpha = clamp(f.life / f.max, 0, 1); ctx.fillStyle = '#000'; ctx.fillText(f.text, sx + 1, sy + 1); ctx.fillStyle = f.color; ctx.fillText(f.text, sx, sy); }
   ctx.globalAlpha = 1;
+  // edge markers: the map is big and the camera follows the Mayor, so point at
+  // the Town Hall and at any raiders currently off screen.
+  const marker = (wx, wy, col, size) => {
+    const [mx, my] = W2S(wx, wy);
+    if (mx > 16 && mx < canvas.width - 16 && my > 16 && my < canvas.height - 16) return false;
+    const cx = canvas.width / 2, cy = canvas.height / 2;
+    let dx = mx - cx, dy = my - cy;
+    const sx = (canvas.width / 2 - 22) / Math.abs(dx || 1e-6), sy = (canvas.height / 2 - 22) / Math.abs(dy || 1e-6);
+    const k2 = Math.min(sx, sy); dx *= k2; dy *= k2;
+    const a = Math.atan2(dy, dx);
+    ctx.save(); ctx.translate(cx + dx, cy + dy); ctx.rotate(a);
+    ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(size, 0); ctx.lineTo(-size * 0.7, size * 0.62); ctx.lineTo(-size * 0.7, -size * 0.62); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = '#0009'; ctx.lineWidth = 1.5; ctx.stroke(); ctx.restore();
+    return true;
+  };
+  const th = hall(); if (th) { const c = center(th); marker(c.x, c.y, '#e8c040', 9); }
+  if (S.mobs.length) {
+    const near = S.mobs.slice().sort((a, b) => dist(a, S.hero) - dist(b, S.hero)).slice(0, 10);
+    for (const m of near) marker(m.x, m.y, MOBS[m.type].boss ? '#ff40c0' : '#e04a3a', MOBS[m.type].boss ? 12 : 8);
+  }
   // crosshair
   if (!buildSel && !demolish && hover.x >= 0) { const [sx, sy] = W2S(mouseW.x, mouseW.y); ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(sx - 9, sy); ctx.lineTo(sx - 4, sy); ctx.moveTo(sx + 4, sy); ctx.lineTo(sx + 9, sy); ctx.moveTo(sx, sy - 9); ctx.lineTo(sx, sy - 4); ctx.moveTo(sx, sy + 4); ctx.lineTo(sx, sy + 9); ctx.stroke(); ctx.fillStyle = '#f33'; ctx.fillRect(sx - 1, sy - 1, 2, 2); }
   // banner
