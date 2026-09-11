@@ -646,7 +646,6 @@ function cone(g, cx, top, h, half, col) {   // pixel pine layer
 }
 function figure(g, o) {            // generic 16x16 humanoid; o = {skin, hair, shirt, pants, hat, helm, frame, item}
   const f = o.frame || 0;
-  R(g, 5, 13, 6, 1, 'rgba(0,0,0,.25)');                      // shadow
   R(g, 6 + (f ? 1 : 0), 11, 2, 3, o.pants); R(g, 9 - (f ? 1 : 0), 11, 2, 3, o.pants);  // legs
   R(g, 5, 7, 6, 4, o.shirt); P(g, 5, 7, shade(o.shirt, 1.25)); // body
   R(g, 4, 8, 1, 2, o.skin); R(g, 11, 8, 1, 2, o.skin);          // arms
@@ -662,7 +661,23 @@ function figure(g, o) {            // generic 16x16 humanoid; o = {skin, hair, s
   if (o.item === 'staff') { R(g, 12, 2, 1, 11, '#8a6a48'); P(g, 12, 1, '#c060ff'); P(g, 11, 2, '#e0a0ff'); P(g, 13, 2, '#e0a0ff'); }
   if (o.item === 'bomb') { R(g, 11, 7, 3, 3, '#1a1a22'); P(g, 12, 6, '#ffa030'); P(g, 13, 5, '#ffe070'); }
 }
-const SPR = {};
+const SPR = {}, SHADOW = {};
+// Flattened, skewed silhouettes: buildings and trees cast a shadow to the
+// lower-left so they read as sitting on the ground instead of floating on it.
+function silhouette(img) {
+  return mk(img.width, img.height, g => {
+    g.drawImage(img, 0, 0);
+    g.globalCompositeOperation = 'source-in';
+    g.fillStyle = '#000'; g.fillRect(0, 0, img.width, img.height);
+  });
+}
+function castShadow(img, wx, wy, alpha) {
+  const sil = SHADOW.map.get(img); if (!sil) return;
+  const [sx, sy] = W2S(wx, wy), dw = img.width * SCALE, dh = img.height * SCALE;
+  ctx.save(); ctx.translate(sx, sy); ctx.transform(1, 0, -0.55, 0.4, 0, 0);
+  ctx.globalAlpha = alpha; ctx.drawImage(sil, -dw / 2, -dh, dw, dh);
+  ctx.globalAlpha = 1; ctx.restore();
+}
 function buildSprites() {
   const G = new Array(8).fill('#5d9b3c');
   SPR.grass = G.map((c, i) => mk(PX, PX, g => {
@@ -698,21 +713,21 @@ function buildSprites() {
     if (i === 1) for (let y = 0; y < PX; y++) { P(g, 5, y, shade(c, 0.82)); P(g, 11, y, shade(c, 0.82)); }
     if (i === 2) for (let k = 0; k < 6; k++) P(g, Math.floor(rnd(0, PX)), Math.floor(rnd(0, PX)), shade(c, 0.84));
   }));
-  SPR.tree = [0, 1, 2].map(v => mk(PX, 24, g => {
-    const col = ['#2f6b34', '#35743a', '#2a6230'][v];
-    R(g, 3, 22, 10, 2, 'rgba(0,0,0,.2)');
-    R(g, 7, 18, 2, 6, '#5a3a22'); P(g, 7, 18, '#6a4a2a');
-    cone(g, 8, 11, 8, 7, col); cone(g, 8, 6, 7, 5, col); cone(g, 8, 1, 6, 3, col);
-  }));
-  SPR.house = mk(PX, PX, g => {
-    R(g, 3, 15, 10, 1, 'rgba(0,0,0,.25)');
+  SPR.tree = [
+    mk(PX, 24, g => { const c = '#2f6b34'; R(g, 7, 18, 2, 6, '#5a3a22'); P(g, 7, 18, '#6a4a2a'); cone(g, 8, 11, 8, 7, c); cone(g, 8, 6, 7, 5, c); cone(g, 8, 1, 6, 3, c); }),
+    mk(PX, 24, g => { const c = '#35743a'; R(g, 7, 17, 2, 7, '#5a3a22'); P(g, 8, 17, '#6a4a2a'); cone(g, 8, 10, 8, 7, c); cone(g, 8, 5, 7, 5, c); cone(g, 8, 0, 6, 3, c); }),
+    mk(PX, 19, g => { const c = '#2a6230'; R(g, 7, 15, 2, 4, '#5a3a22'); cone(g, 8, 8, 8, 7, c); cone(g, 8, 3, 6, 5, c); cone(g, 8, 0, 4, 2, c); }),
+    mk(PX, 23, g => { const c = '#31703a'; R(g, 8, 17, 2, 6, '#5a3a22'); cone(g, 7, 10, 8, 6, c); cone(g, 7, 5, 6, 5, c); cone(g, 6, 1, 5, 3, c); }),
+    mk(PX, 20, g => { R(g, 7, 10, 2, 10, '#6a5442'); R(g, 4, 12, 3, 1, '#6a5442'); R(g, 9, 9, 4, 1, '#6a5442'); P(g, 12, 8, '#6a5442'); P(g, 3, 11, '#6a5442'); R(g, 6, 8, 4, 2, '#5a4434'); }),
+  ];
+  SPR.house = [['#b84535', '#a83a2a', '#7a2a1e'], ['#5a7fa8', '#4d6e94', '#2e4a6a'], ['#8a7a4a', '#7a6a3e', '#4e4424']].map(roof => mk(PX, PX, g => {
     R(g, 2, 7, 12, 8, '#d9b98a'); R(g, 2, 7, 12, 1, '#c4a577'); R(g, 2, 7, 1, 8, '#c4a577');
-    for (let i = 0; i < 6; i++) R(g, 1 + i, 1 + i, 14 - 2 * i, 1, i % 2 ? '#a83a2a' : '#b84535');
-    R(g, 1, 6, 14, 1, '#7a2a1e');
+    for (let i = 0; i < 6; i++) R(g, 1 + i, 1 + i, 14 - 2 * i, 1, i % 2 ? roof[1] : roof[0]);
+    R(g, 1, 6, 14, 1, roof[2]);
     R(g, 7, 11, 3, 4, '#5a3a22'); P(g, 9, 13, '#e8c040');
     R(g, 3, 9, 2, 2, '#7fc9e8'); R(g, 11, 9, 2, 2, '#7fc9e8');
     R(g, 11, 1, 2, 3, '#6a6a72');
-  });
+  }));
   SPR.farm = mk(32, 32, g => {
     R(g, 0, 0, 32, 32, '#6b4326');
     for (let y = 2; y < 30; y += 4) { R(g, 2, y, 28, 2, '#7f5230'); for (let x = 3; x < 30; x += 4) { P(g, x, y - 1, '#5aa040'); P(g, x, y, '#4a8a30'); P(g, x + 1, y - 1, '#6ab050'); } }
@@ -775,7 +790,6 @@ function buildSprites() {
   SPR.goblin = two({ skin: '#5aa040', hair: '#3a7a2a', shirt: '#6a4a2a', pants: '#4a3a2a', item: 'dagger' });
   SPR.orc = [0, 1].map(f => mk(PX, PX, g => { figure(g, { skin: '#6a8a4a', hair: '#2a2a2a', shirt: '#5a4a3a', pants: '#3a2a2a', frame: f, item: 'club' }); P(g, 6, 6, '#f8f8f8'); P(g, 9, 6, '#f8f8f8'); }));
   SPR.troll = [0, 1].map(f => mk(24, 24, g => {
-    R(g, 6, 21, 12, 2, 'rgba(0,0,0,.3)');
     R(g, 8 + (f ? 2 : 0), 16, 3, 6, '#5a6a5a'); R(g, 13 - (f ? 2 : 0), 16, 3, 6, '#5a6a5a');
     R(g, 6, 8, 12, 8, '#7a8a7a'); R(g, 6, 8, 12, 1, shade('#7a8a7a', 1.2)); R(g, 4, 9, 2, 6, '#7a8a7a'); R(g, 18, 9, 2, 6, '#7a8a7a');
     R(g, 8, 2, 8, 6, '#8a9a8a'); R(g, 7, 1, 10, 2, '#3a4a3a'); P(g, 10, 5, '#c02020'); P(g, 13, 5, '#c02020'); P(g, 9, 7, '#f8f8f8'); P(g, 14, 7, '#f8f8f8');
@@ -796,7 +810,6 @@ function buildSprites() {
     heart: mk(PX, PX, g => { R(g, 4, 5, 3, 3, '#e04060'); R(g, 9, 5, 3, 3, '#e04060'); R(g, 4, 7, 8, 2, '#e04060'); R(g, 5, 9, 6, 1, '#e04060'); R(g, 6, 10, 4, 1, '#c02040'); R(g, 7, 11, 2, 1, '#c02040'); P(g, 5, 6, '#ff90a0'); }),
   };
   SPR.king = [0, 1].map(f => mk(32, 32, g => {
-    R(g, 8, 29, 16, 2, 'rgba(0,0,0,.3)');
     R(g, 10 + (f ? 2 : 0), 22, 4, 8, '#4a5a4a'); R(g, 18 - (f ? 2 : 0), 22, 4, 8, '#4a5a4a');
     R(g, 7, 10, 18, 12, '#6a7a6a'); R(g, 7, 10, 18, 1, '#8a9a8a'); R(g, 4, 12, 3, 8, '#6a7a6a'); R(g, 25, 12, 3, 8, '#6a7a6a');
     R(g, 10, 3, 12, 8, '#7a8a7a'); P(g, 13, 7, '#ff3030'); P(g, 18, 7, '#ff3030'); P(g, 12, 10, '#f8f8f8'); P(g, 19, 10, '#f8f8f8'); R(g, 13, 8, 6, 1, '#4a5a4a');
@@ -805,6 +818,14 @@ function buildSprites() {
   }));
   SPR.arrow = mk(4, 2, g => { R(g, 0, 0, 4, 1, '#d8c8a0'); P(g, 3, 0, '#e8e8f0'); });
   SPR.bullet = mk(4, 2, g => { R(g, 0, 0, 3, 2, '#ffe070'); P(g, 3, 0, '#fff8d0'); });
+}
+
+function buildShadows() {
+  SHADOW.map = new Map();
+  for (const t of ['house', 'farm', 'mill', 'mine', 'wall', 'tower', 'barracks', 'tavern', 'hall', 'tree']) {
+    const sp = SPR[t];
+    for (const img of Array.isArray(sp) ? sp : [sp]) SHADOW.map.set(img, silhouette(img));
+  }
 }
 
 // ---------------------------------------------------------------- ground (prerendered, world-sized)
@@ -1011,7 +1032,8 @@ function draw() {
   items.sort((a, b) => a.y - b.y);
   for (const it of items) {
     if (it.b) {
-      const b = it.b, img = b.type === 'tree' ? SPR.tree[b.v] : SPR[b.type];
+      const b = it.b, sp = SPR[b.type], img = Array.isArray(sp) ? sp[b.v % sp.length] : sp;
+      castShadow(img, b.gx + b.w / 2, b.gy + b.h, b.type === 'tree' ? 0.22 : 0.26);
       spr(img, b.gx + b.w / 2, b.gy + b.h, img.width, img.height, false);
       if (b.type === 'hall') { const [sx, sy] = W2S(b.gx, b.gy); ctx.fillStyle = '#fff'; ctx.font = 'bold 11px monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText('Lv' + S.thLevel, sx + 4, sy + 4); }
       if (b.hp < b.maxhp && b.type !== 'tree') hpBar(b.gx + b.w / 2, b.gy + b.h - 0.25, b.w * TS - 10, b.hp / b.maxhp, b.hp / b.maxhp > 0.4 ? '#6fcf7a' : '#ef6b6b');
@@ -1019,6 +1041,8 @@ function draw() {
     } else {
       const e = it.e; if (e.x < x0 - 1 || e.x > x1 + 1 || e.y < y0 - 1 || e.y > y1 + 1) continue;
       const frames = SPR[it.kind], img = frames[e.moving ? Math.floor(e.anim) % 2 : 0];
+      const [shx, shy] = W2S(e.x, e.y + 0.4), sr = it.kind === 'king' ? 20 : it.kind === 'troll' ? 15 : 10;
+      ctx.fillStyle = 'rgba(0,0,0,.26)'; ctx.beginPath(); ctx.ellipse(shx, shy, sr, sr * 0.4, 0, 0, Math.PI * 2); ctx.fill();
       spr(img, e.x, e.y + 0.45, img.width, img.height, e.face === -1);
       if (it.kind === 'villager') {
         const bubble = e.state === 'working' ? '💪' : e.state === 'fun' ? '🎶' : e.hunger > 80 ? '🍽️' : (e.state === 'toHome' && !isNight()) ? '😴' : null;
@@ -1258,6 +1282,6 @@ function frame(now) {
   }
   requestAnimationFrame(frame);
 }
-buildSprites(); buildButtons(); resize();
+buildSprites(); buildShadows(); buildButtons(); resize();
 $('#btn-continue').style.display = hasSave() ? '' : 'none';
 requestAnimationFrame(frame);
