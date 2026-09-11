@@ -10,6 +10,8 @@ so there are no image files and nothing to download.
 
 No build step, no dependencies, no internet needed. Open `index.html` and play.
 
+![Hollowmere at dusk](docs/screenshot.jpg)
+
 ## Play
 
 ```bash
