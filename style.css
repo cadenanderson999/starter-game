@@ -79,4 +79,19 @@ kbd { background: var(--bg); border: 1px solid var(--line); border-radius: 4px; 
 .row { display: flex; gap: 10px; margin: 14px 0; }
 .big { padding: 12px 18px; font-size: 16px; font-weight: 600; }
 #btn-start, #btn-again { background: linear-gradient(#f0cf5e, #d8ae2e); color: #2a1e10; border-color: #f6dd86; font-weight: 700; }
-@media (max-width: 1000px) { aside { width: 190px; } }
+.drawer-btn { display: none; padding: 4px 9px; font-size: 17px; line-height: 1.1; }
+@media (max-width: 1100px) { aside { width: 190px; } }
+@media (max-width: 820px) {
+  .drawer-btn { display: block; }
+  .brand { font-size: 14px; }
+  #top { gap: 8px; padding: 6px 8px; font-size: 13px; }
+  .res { padding: 2px 7px 2px 3px; gap: 3px; }
+  img.ic { width: 16px; height: 16px; }
+  #next, #clock-fill, .bar { display: none; }
+  main { position: relative; }
+  aside { position: absolute; top: 0; bottom: 0; z-index: 5; width: 250px; max-width: 82vw;
+    transform: translateX(-105%); transition: transform .18s ease; box-shadow: 6px 0 24px #000a; }
+  #info { right: 0; transform: translateX(105%); box-shadow: -6px 0 24px #000a; }
+  body.show-build #build, body.show-info #info { transform: translateX(0); }
+  #mini { width: 116px; height: 87px; right: 6px; top: 6px; }
+}

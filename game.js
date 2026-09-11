@@ -1344,6 +1344,15 @@ function setSpeed(s) {
   for (const b of document.querySelectorAll('#speed button')) b.classList.toggle('on', +b.dataset.speed === s);
 }
 for (const b of document.querySelectorAll('#speed button')) b.onclick = () => setSpeed(+b.dataset.speed);
+// Narrow screens: the side panels slide in over the map instead of squeezing it.
+const drawer = name => {
+  const on = document.body.classList.contains('show-' + name);
+  document.body.classList.remove('show-build', 'show-info');
+  if (!on) document.body.classList.add('show-' + name);
+};
+$('#t-build').onclick = () => drawer('build');
+$('#t-info').onclick = () => drawer('info');
+canvas.addEventListener('pointerdown', () => document.body.classList.remove('show-build', 'show-info'));
 $('#btn-upgrade').onclick = () => { upgradeHall(); updateUI(); };
 for (const k in UPGRADES) $('#up-' + k).onclick = () => { buyUpgrade(k); updateUI(); };
 for (const b of document.querySelectorAll('#diff button')) b.onclick = () => { chosenDiff = b.dataset.diff; for (const o of document.querySelectorAll('#diff button')) o.classList.toggle('on', o === b); };
