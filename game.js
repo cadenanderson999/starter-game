@@ -79,7 +79,7 @@ function newState() {
     v: 1, nextId: 1, res: { gold: 50, wood: 80, food: 40 }, day: 1, t: 0, thLevel: 1,
     buildings: [], villagers: [], mobs: [], soldiers: [], projs: [], fx: [], log: [],
     waveQueue: [], arrivalTimer: 0, kills: 0, over: false, banner: null,
-    hero: { x: hx + 1, y: hy + 2.6, tx: null, ty: null, hp: 150, maxhp: 150, target: null, cd: 0, dead: 0 },
+    hero: { x: hx + 1, y: hy + 2.6, tx: null, ty: null, hp: 150, maxhp: 150, target: null, cd: 0, dead: 0, cry: 0, cryFx: 0 },
   };
   S = st; rebuildGrid();
   addBuilding('hall', hx, hy);
@@ -375,13 +375,34 @@ function updateHero(dt) {
     if (h.dead <= 0) { const hall = S.buildings.find(b => b.type === 'hall'); const p = door(hall); h.x = p.x; h.y = p.y; h.hp = h.maxhp; h.tx = null; log('🤠 The Mayor is back on their feet.'); }
     return;
   }
-  h.cd -= dt;
+  h.cd -= dt; h.cry = Math.max(0, (h.cry || 0) - dt); h.cryFx = Math.max(0, (h.cryFx || 0) - dt);
   if (h.tx != null) {                                    // player-ordered move
     if (moveToward(h, h.tx, h.ty, 3.5, dt)) h.tx = null;
     const m = mob(h.target); if (m && dist(h, m) <= 1.2 && h.cd <= 0) { damageMob(m, 14, h); h.cd = 0.5; }
     return;
   }
   if (!fightNearby(h, dt, 1.2, 14, 0.5, 4) && !isNight()) h.hp = clamp(h.hp + 2 * dt, 0, h.maxhp);
+}
+
+const CRY_CD = 20, CRY_RANGE = 3, CRY_DMG = 35;
+function warCry() {
+  const h = S.hero; if (h.dead > 0 || (h.cry || 0) > 0) return;
+  h.cry = CRY_CD; h.cryFx = 0.6; let n = 0;
+  for (const m of S.mobs.slice()) if (dist(h, m) <= CRY_RANGE) { damageMob(m, CRY_DMG, h); n++; }
+  fx(h.x, h.y - 0.8, 'WAR CRY!', '#fff', 1);
+  if (n) log(`🤠 War cry hits ${n} mob${n === 1 ? '' : 's'}!`); blip(110, 0.35);
+}
+const EVENTS = [
+  { when: () => S.res.gold >= 30, run: () => { S.res.gold -= 30; S.res.wood += 60; return '🧳 A travelling merchant swapped 60 wood for 30 gold.'; } },
+  { when: () => S.villagers.length > 0, run: () => { for (const v of S.villagers) v.fun = 100; return '🎉 A festival! Everyone is in high spirits.'; } },
+  { when: () => S.buildings.some(b => b.type === 'farm'), run: () => { S.res.food += 30; return '🌦️ Good rains — a bumper harvest brought 30 food.'; } },
+  { when: () => S.villagers.length < capacity(), run: () => { const v = addVillager(); return `🚶 A wanderer, ${v.name}, asked to stay. Welcome!`; } },
+  { when: () => S.res.wood >= 20, run: () => { S.res.wood -= 20; return '🐀 Rats got into the wood store. Lost 20 wood.'; } },
+];
+function dailyEvent() {
+  if (S.day < 2 || Math.random() > 0.5) return;
+  const ok = EVENTS.filter(e => e.when()); if (!ok.length) return;
+  const msg = ok[Math.floor(Math.random() * ok.length)].run(); log(msg); S.banner = { text: msg, life: 4 };
 }
 
 // ---------------------------------------------------------------- main update
@@ -393,8 +414,10 @@ function update(dt) {
   if (S.t >= CYCLE) {
     S.t -= CYCLE; S.day++;
     if (S.mobs.length) log(`☀️ Dawn. ${S.mobs.length} mobs fled the sunlight.`); else log(`☀️ Day ${S.day}. The town held the night!`);
+    if (S.mobs.length === 0) { const bonus = 10 + 5 * (S.day - 1); S.res.gold += bonus; log(`🏆 Raid repelled! Bounty of 🪙${bonus}.`); }
     S.mobs = []; S.projs = [];
     S.banner = { text: `☀️ Day ${S.day}`, life: 3 };
+    dailyEvent();
     const cap = capacity();
     if (S.villagers.length > cap) { const n = S.villagers.length - cap; S.villagers.length = cap; log(`${n} villager(s) left — not enough housing.`); }
   }
@@ -405,6 +428,8 @@ function update(dt) {
     S.arrivalTimer += dt;
     if (S.arrivalTimer >= 12) { S.arrivalTimer = 0; const v = addVillager(); log(`🧑‍🌾 ${v.name} moved into Hollowmere.`); }
   }
+  if (S.res.food < 1 && !S.foodWarned) { S.foodWarned = true; log('⚠️ The granary is empty! Hungry villagers work slowly. Build more farms.'); S.banner = { text: '⚠️ Out of food — build more farms!', life: 3 }; }
+  else if (S.res.food > 15) S.foodWarned = false;
   for (const v of S.villagers) updateVillager(v, dt);
   for (const b of S.buildings.slice()) { if (b.type === 'tower') updateTower(b, dt); else if (b.type === 'barracks') updateBarracks(b, dt); }
   for (const m of S.mobs.slice()) updateMob(m, dt);
@@ -433,8 +458,10 @@ function load() {
 function hasSave() { try { const r = localStorage.getItem(SAVE_KEY); if (!r) return false; const s = JSON.parse(r); return s && !s.over; } catch (e) { return false; } }
 
 // ---------------------------------------------------------------- audio (tiny synth, optional)
-let actx = null;
+let actx = null, muted = false;
+try { muted = !!localStorage.getItem('hollowmere-muted'); } catch (e) {}
 function blip(freq, len) {
+  if (muted) return;
   try {
     if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
     const o = actx.createOscillator(), g = actx.createGain();
@@ -513,7 +540,8 @@ function draw() {
   // soldiers + hero
   for (const s of S.soldiers) { emoji('💂', s.x * T, s.y * T, 18); if (s.hp < s.maxhp) hpBar(s.x * T, s.y * T + 11, 20, s.hp / s.maxhp, '#6fcf7a'); }
   const h = S.hero;
-  if (h.dead <= 0) { emoji('🤠', h.x * T, h.y * T, 22); hpBar(h.x * T, h.y * T + 13, 24, h.hp / h.maxhp, '#f2c14e'); if (h.tx != null) { ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.beginPath(); ctx.arc(h.tx * T, h.ty * T, 5, 0, Math.PI * 2); ctx.stroke(); } if (selected && selected.kind === 'hero') ring(h.x * T, h.y * T, 14); }
+  if (h.dead <= 0) { if (h.cryFx > 0) { ctx.strokeStyle = `rgba(255,230,120,${h.cryFx / 0.6})`; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(h.x * T, h.y * T, CRY_RANGE * T * (1 - h.cryFx / 0.6 * 0.6), 0, Math.PI * 2); ctx.stroke(); }
+    emoji('🤠', h.x * T, h.y * T, 22); hpBar(h.x * T, h.y * T + 13, 24, h.hp / h.maxhp, '#f2c14e'); if (h.tx != null) { ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.beginPath(); ctx.arc(h.tx * T, h.ty * T, 5, 0, Math.PI * 2); ctx.stroke(); } if (selected && selected.kind === 'hero') ring(h.x * T, h.y * T, 14); }
   // mobs
   for (const m of S.mobs) {
     const x = m.x * T, y = m.y * T, sz = m.type === 'troll' ? 30 : m.type === 'orc' ? 24 : 18;
@@ -589,7 +617,7 @@ function updateUI() {
 function needBar(label, val) { return `<div class="need"><span>${label}</span><div class="b"><i class="${val < 30 ? 'low' : ''}" style="width:${val}%"></i></div></div>`; }
 function selectionHTML() {
   if (!selected) return '<i>Nothing selected. Click a building, villager, or mob. Click the ground to move the Mayor.</i>';
-  if (selected.kind === 'hero') { const h = S.hero; return `<div class="t">🤠 The Mayor</div><div class="m">HP ${Math.ceil(h.hp)}/${h.maxhp} · hits for 14</div><div class="m">Click the ground to walk, click a mob to attack. Heals during the day.</div>`; }
+  if (selected.kind === 'hero') { const h = S.hero; return `<div class="t">🤠 The Mayor</div><div class="m">HP ${Math.ceil(h.hp)}/${h.maxhp} · hits for 14</div><div class="m">War Cry <kbd>Q</kbd>: ${h.cry > 0 ? `ready in ${Math.ceil(h.cry)}s` : '<b style="color:var(--green)">ready</b>'} — ${CRY_DMG} damage to all mobs within ${CRY_RANGE} tiles</div><div class="m">Click the ground to walk, click a mob to attack. Heals during the day.</div>`; }
   if (selected.kind === 'building') {
     const b = bld(selected.id); if (!b) { selected = null; return selectionHTML(); }
     const d = DEFS[b.type]; let extra = '';
@@ -643,6 +671,8 @@ document.addEventListener('keydown', e => {
   else if (k === ' ') { e.preventDefault(); setSpeed(paused ? speed : 0); }
   else if (k === 'x' || k === 'X') { demolish = !demolish; buildSel = null; }
   else if (k === 'r' || k === 'R') repairAll();
+  else if (k === 'q' || k === 'Q') warCry();
+  else if (k === 'm' || k === 'M') { muted = !muted; try { localStorage.setItem('hollowmere-muted', muted ? '1' : ''); } catch (e) {} toast(muted ? '🔇 Sound off' : '🔊 Sound on'); }
   else { const t = BUILD_ORDER.find(t => DEFS[t].key === k); if (t) selectBuild(buildSel === t ? null : t); }
   updateUI();
 });

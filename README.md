@@ -37,7 +37,9 @@ and visit the tavern when bored.
 
 **Night (45 s)** — goblins 👺, orcs 👹 and trolls 🧌 raid from the map edges and attack the nearest
 building. Walls in their path get smashed first. Towers shoot, soldiers hunt, and you control the
-**Mayor 🤠**: click the ground to move, click a mob to attack it. Waves grow every night.
+**Mayor 🤠**: click the ground to move, click a mob to attack it, and press `Q` for a War Cry that
+blasts every mob nearby. Waves grow every night; clear one completely for a gold bounty, and watch the
+town log for random daily events — merchants, festivals, rats in the wood store.
 
 Upgrade the Town Hall to unlock the Barracks and Tavern, gain housing, and (at level 3) boost
 tower damage. **If the Town Hall falls, the town is lost.**
@@ -50,6 +52,8 @@ tower damage. **If the Town Hall falls, the town is lost.**
 | `Esc` / right-click | Cancel |
 | `X` | Demolish mode (50 % refund) |
 | `R` | Repair everything (1 wood per 10 HP) |
+| `Q` | Mayor's War Cry (20 s cooldown) |
+| `M` | Mute |
 | `Space` | Pause |
 
 ## Code
