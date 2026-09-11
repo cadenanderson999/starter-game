@@ -9,7 +9,7 @@ const DAY_LEN = 90, NIGHT_LEN = 50, CYCLE = DAY_LEN + NIGHT_LEN;
 const SAVE_KEY = 'hollowmere-save-v2';
 
 const DEFS = {
-  hall:     { name: 'Town Hall',    icon: '🏛️', w: 2, h: 2, hp: 600, cost: {}, cap: 4, mini: '#e8c040',
+  hall:     { name: 'Town Hall',    icon: '🏛️', w: 2, h: 2, hp: 600, cost: {}, cap: 4, mini: '#e8c040', range: 4, dmg: 6, rof: 1,
               desc: 'The heart of Hollowmere. Lose it and the town falls. Upgrade it to unlock more buildings.' },
   house:    { name: 'House',        icon: '🏠', w: 1, h: 1, hp: 120, cost: { wood: 20 }, cap: 3, key: '1', mini: '#d08a5a',
               desc: 'Room for 3 villagers. Villagers sleep here at night.' },
@@ -44,7 +44,7 @@ const MOBS = {
   troll:  { name: 'Troll',  hp: 250, spd: 1.1, dmg: 25, rof: 1.5, gold: 20, r: 0.65 },
   shaman: { name: 'Shaman', hp: 40,  spd: 1.6, dmg: 12, rof: 2.0, gold: 10, ranged: 4, r: 0.45 },
   bomber: { name: 'Bomber', hp: 25,  spd: 3.0, dmg: 80, rof: 1.0, gold: 5,  bomb: true, r: 0.45 },
-  king:   { name: 'Troll King', hp: 900, spd: 1.0, dmg: 45, rof: 1.6, gold: 120, boss: true, r: 0.9 },
+  king:   { name: 'Troll King', hp: 560, spd: 1.0, dmg: 32, rof: 1.6, gold: 120, boss: true, r: 0.9 },
 };
 const DASH_CD = 3, DASH_DIST = 3;
 const DIFFS = { easy: 0.7, normal: 1, hard: 1.4 };
@@ -344,11 +344,11 @@ function updateVillager(v, dt) {
 // ---------------------------------------------------------------- mobs
 function waveFor(n) {
   const list = [];
-  for (let i = 0; i < 4 + 2 * n; i++) list.push('goblin');
-  if (n >= 2) for (let i = 0; i < Math.floor(n * 1.2) - 1; i++) list.push('orc');
-  if (n >= 4) for (let i = 0; i < Math.floor((n - 2) / 2); i++) list.push('troll');
+  for (let i = 0; i < 2 + 2 * n; i++) list.push('goblin');
+  if (n >= 2) for (let i = 0; i < Math.floor(n * 0.9) - 1; i++) list.push('orc');
+  if (n >= 4) for (let i = 0; i < Math.floor((n - 3) / 2) + 1; i++) list.push('troll');
   if (n >= 3) for (let i = 0; i < Math.floor((n - 1) / 2); i++) list.push('shaman');
-  if (n >= 3) for (let i = 0; i < Math.floor(n / 2); i++) list.push('bomber');
+  if (n >= 3) for (let i = 0; i < Math.floor((n - 1) / 2); i++) list.push('bomber');
   list.sort(() => Math.random() - 0.5);
   if (n % 5 === 0) list.push('king');
   const spread = Math.min(18, 5 + list.length);
@@ -474,12 +474,15 @@ function nearestMob(p, range) {
   for (const m of S.mobs) { const d = dist(p, m); if (d < bd) { bd = d; best = m; } }
   return best;
 }
+// Towers and the Town Hall both shoot; the hall is weaker but means a town is never
+// completely defenceless while the Mayor is elsewhere.
 function updateTower(b, dt) {
+  const d = DEFS[b.type];
   b.cd -= dt; if (b.cd > 0) return;
-  const c = center(b), m = nearestMob(c, DEFS.tower.range + 0.5);
+  const c = center(b), m = nearestMob(c, d.range + 0.5);
   if (!m) return;
-  const dmg = DEFS.tower.dmg * (S.thLevel >= 3 ? 1.5 : 1);
-  S.projs.push({ x: c.x, y: c.y - 0.4, target: m.id, dmg, spd: 14 }); b.cd = DEFS.tower.rof;
+  const dmg = d.dmg * (b.type === 'hall' ? 1 + 0.55 * (S.thLevel - 1) : S.thLevel >= 3 ? 1.5 : 1);
+  S.projs.push({ x: c.x, y: c.y - 0.4, target: m.id, dmg, spd: 14 }); b.cd = d.rof;
 }
 function updateProj(p, dt) {
   if (p.target != null) {                                        // homing arrow
@@ -647,6 +650,7 @@ function update(dt) {
   else if (S.res.food > 15) S.foodWarned = false;
   for (const v of S.villagers) updateVillager(v, dt);
   for (const b of ofType('tower').slice()) updateTower(b, dt);
+  for (const b of ofType('hall')) updateTower(b, dt);
   for (const b of ofType('barracks').slice()) updateBarracks(b, dt);
   for (const m of S.mobs.slice()) updateMob(m, dt);
   S.projs = S.projs.filter(p => updateProj(p, dt));
@@ -1399,7 +1403,7 @@ function selectionHTML() {
       if (b.type === 'farm' && S.weather === 'rain') extra += '<br><span style="color:var(--green)">+35% while it rains</span>';
     }
     if (b.type === 'barracks') extra = `Soldiers: ${S.soldiers.filter(s => s.home === b.id).length}/${d.soldiers}`;
-    if (b.type === 'hall') extra = `Level ${S.thLevel} · houses ${TH_LEVELS[S.thLevel - 1].cap}<br><b>Townsfolk</b><br>` + (S.villagers.map(v => { const j = bld(v.job); return `${happiness(v) > 66 ? '😊' : happiness(v) > 33 ? '😐' : '😞'} ${v.name} · ${j ? DEFS[j.type].name : 'no job'}`; }).join('<br>') || 'nobody yet');
+    if (b.type === 'hall') extra = `Level ${S.thLevel} · houses ${TH_LEVELS[S.thLevel - 1].cap} · a watchman shoots for ${Math.round(DEFS.hall.dmg * (1 + 0.55 * (S.thLevel - 1)))}<br><b>Townsfolk</b><br>` + (S.villagers.map(v => { const j = bld(v.job); return `${happiness(v) > 66 ? '😊' : happiness(v) > 33 ? '😐' : '😞'} ${v.name} · ${j ? DEFS[j.type].name : 'no job'}`; }).join('<br>') || 'nobody yet');
     if (b.type === 'house') extra = `Houses ${d.cap}`;
     if (b.type === 'gate') extra = 'Villagers and the Mayor walk straight through. Raiders cannot.';
     return `<div class="t">${d.icon} ${d.name}</div><div class="m">HP ${Math.ceil(b.hp)}/${b.maxhp}</div><div class="m">${extra}</div><div class="m" style="margin-top:6px">${d.desc}</div>`;

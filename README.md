@@ -93,6 +93,21 @@ tower damage. **If the Town Hall falls, the town is lost.**
 | `M` | Mute |
 | `Space` | Pause |
 
+## Balance
+
+Tuned against a scripted run: a fixed build order, and a crude bot that stands by the
+Town Hall and shoots the nearest raider. Average nights survived over five runs each:
+
+| | bot fights | bot never shoots |
+| --- | --- | --- |
+| Easy | 10.4 | 4.0 |
+| Normal | 5.4 | 3.0 |
+| Hard | 4.0 | 2.4 |
+
+The bot never retreats, dashes or repositions, so a real player should get well past
+those numbers. The "never shoots" column is the floor: towers, soldiers and the Town
+Hall watchman alone hold for a few nights, but the town needs its Mayor.
+
 ## Code
 
 Three files, zero dependencies:
