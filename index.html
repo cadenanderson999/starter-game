@@ -79,12 +79,27 @@
 
 <div id="overlay">
   <div class="card">
-    <h1>🏘️ Hollowmere</h1>
+    <div id="cast"></div>
+    <h1>Hollowmere</h1>
     <p class="tag">Build a town by day. Survive the raids by night.</p>
-    <p>You start with a Town Hall, two villagers, and a small pile of wood. Build houses so villagers move in, farms so they eat, mills and mines for materials. Villagers have needs — hunger, energy and fun — and happy villagers work faster.</p>
-    <p>Every night goblins, orcs, trolls, shamans and bombers come out of the forest — and every fifth night the Troll King himself — to wreck your town. Fortify with walls, archer towers and barracks, and lead the fight yourself as the Mayor 🤠 — walk with <kbd>WASD</kbd>, shoot with the mouse.</p>
-    <p class="keys"><kbd>WASD</kbd> move · left-click shoot / place · right-click inspect · <kbd>1</kbd>–<kbd>9</kbd> pick a building · <kbd>Esc</kbd> cancel · <kbd>Space</kbd> pause · <kbd>X</kbd> demolish / chop · <kbd>R</kbd> repair · <kbd>Q</kbd> War Cry · <kbd>Shift</kbd> dash · <kbd>M</kbd> mute</p>
-    <div id="diff" class="row" style="margin-bottom:4px"><span style="color:var(--muted);align-self:center">Difficulty:</span>
+    <p>You start with a Town Hall, two villagers and a small pile of wood. Build houses and
+      villagers move in; build farms, mills and mines and they go to work on their own. They
+      get hungry, tired and bored, and happy villagers work faster and repair the damage.</p>
+    <p>Every night raiders come out of the forest, and every fifth night the Troll King leads
+      them. Wall them out, leave a gate for your own people, put up archer towers, and fight
+      alongside your soldiers as the Mayor.</p>
+    <div class="keys">
+      <div><kbd>WASD</kbd><span>walk</span></div>
+      <div><kbd>Left-click</kbd><span>shoot / place</span></div>
+      <div><kbd>Right-click</kbd><span>inspect</span></div>
+      <div><kbd>1</kbd>–<kbd>9</kbd><span>pick a building</span></div>
+      <div><kbd>Q</kbd><span>war cry</span></div>
+      <div><kbd>Shift</kbd><span>dash</span></div>
+      <div><kbd>X</kbd><span>demolish / chop</span></div>
+      <div><kbd>R</kbd><span>repair all</span></div>
+      <div><kbd>Space</kbd><span>pause</span></div>
+    </div>
+    <div id="diff" class="row"><span>Difficulty</span>
       <button data-diff="easy">Easy</button><button data-diff="normal" class="on">Normal</button><button data-diff="hard">Hard</button></div>
     <div class="row">
       <button id="btn-continue" class="big">▶ Continue town</button>

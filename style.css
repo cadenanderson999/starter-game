@@ -95,3 +95,17 @@ kbd { background: var(--bg); border: 1px solid var(--line); border-radius: 4px; 
   body.show-build #build, body.show-info #info { transform: translateX(0); }
   #mini { width: 116px; height: 87px; right: 6px; top: 6px; }
 }
+
+#cast { display: flex; gap: 10px; align-items: flex-end; justify-content: center; margin-bottom: 14px;
+  padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+#cast img { image-rendering: pixelated; height: 52px; width: auto; filter: drop-shadow(2px 4px 0 #0006); }
+#cast img.big { height: 72px; }
+.card h1 { font-size: 30px; letter-spacing: .01em; }
+.card .keys { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px 10px; font-size: 12px;
+  color: var(--muted); margin: 16px 0; }
+.card .keys div { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
+.card .keys span { overflow: hidden; text-overflow: ellipsis; }
+#diff { align-items: center; gap: 8px; margin-bottom: 2px; }
+#diff > span { color: var(--muted); font-size: 13px; }
+#diff button { padding: 4px 12px; }
+@media (max-width: 620px) { .card .keys { grid-template-columns: repeat(2, 1fr); } #cast img { height: 40px; } }

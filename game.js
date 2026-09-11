@@ -1476,5 +1476,15 @@ document.documentElement.style.setProperty('--ic-wood', `url(${iconURL(SPR.drop.
 document.documentElement.style.setProperty('--ic-gold', `url(${iconURL(SPR.drop.gold)})`);
 document.documentElement.style.setProperty('--ic-food', `url(${iconURL(SPR.drop.food)})`);
 buildButtons(); resize();
+// A line-up of the cast on the title card, drawn from the same sprites as the game.
+(() => {
+  const cast = $('#cast'); if (!cast) return;
+  for (const [img, big] of [[SPR.hall, 1], [SPR.house[0], 0], [SPR.hero[0], 0], [SPR.villager[0], 0],
+                            [SPR.goblin[0], 0], [SPR.orc[0], 0], [SPR.troll[0], 0], [SPR.king[0], 1]]) {
+    const el = document.createElement('img');
+    el.src = iconURL(img); el.alt = ''; if (big) el.className = 'big';
+    cast.appendChild(el);
+  }
+})();
 $('#btn-continue').style.display = hasSave() ? '' : 'none';
 requestAnimationFrame(frame);
