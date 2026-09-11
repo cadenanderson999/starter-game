@@ -284,6 +284,7 @@ function damageMob(m, dmg, byUnit) {
   if (m.hp <= 0) {
     S.mobs = S.mobs.filter(x => x !== m);
     S.res.gold += MOBS[m.type].gold; S.kills++;
+    if (S.kills % 10 === 0) { const h = S.hero; h.maxhp = 150 + 10 * (heroLevel() - 1); h.hp = Math.min(h.maxhp, h.hp + 30); log(`🤠 The Mayor reached level ${heroLevel()}! Hits for ${heroDmg()}.`); }
     fx(m.x, m.y, `+🪙${MOBS[m.type].gold}`, '#f2c14e', 1);
     if (selected && selected.kind === 'mob' && selected.id === m.id) selected = null;
     blip(160, 0.06);
@@ -378,13 +379,15 @@ function updateHero(dt) {
   h.cd -= dt; h.cry = Math.max(0, (h.cry || 0) - dt); h.cryFx = Math.max(0, (h.cryFx || 0) - dt);
   if (h.tx != null) {                                    // player-ordered move
     if (moveToward(h, h.tx, h.ty, 3.5, dt)) h.tx = null;
-    const m = mob(h.target); if (m && dist(h, m) <= 1.2 && h.cd <= 0) { damageMob(m, 14, h); h.cd = 0.5; }
+    const m = mob(h.target); if (m && dist(h, m) <= 1.2 && h.cd <= 0) { damageMob(m, heroDmg(), h); h.cd = 0.5; }
     return;
   }
-  if (!fightNearby(h, dt, 1.2, 14, 0.5, 4) && !isNight()) h.hp = clamp(h.hp + 2 * dt, 0, h.maxhp);
+  if (!fightNearby(h, dt, 1.2, heroDmg(), 0.5, 4) && !isNight()) h.hp = clamp(h.hp + 2 * dt, 0, h.maxhp);
 }
 
 const CRY_CD = 20, CRY_RANGE = 3, CRY_DMG = 35;
+const heroLevel = () => 1 + Math.floor(S.kills / 10);
+const heroDmg = () => 14 + 2 * (heroLevel() - 1);
 function warCry() {
   const h = S.hero; if (h.dead > 0 || (h.cry || 0) > 0) return;
   h.cry = CRY_CD; h.cryFx = 0.6; let n = 0;
@@ -617,7 +620,7 @@ function updateUI() {
 function needBar(label, val) { return `<div class="need"><span>${label}</span><div class="b"><i class="${val < 30 ? 'low' : ''}" style="width:${val}%"></i></div></div>`; }
 function selectionHTML() {
   if (!selected) return '<i>Nothing selected. Click a building, villager, or mob. Click the ground to move the Mayor.</i>';
-  if (selected.kind === 'hero') { const h = S.hero; return `<div class="t">🤠 The Mayor</div><div class="m">HP ${Math.ceil(h.hp)}/${h.maxhp} · hits for 14</div><div class="m">War Cry <kbd>Q</kbd>: ${h.cry > 0 ? `ready in ${Math.ceil(h.cry)}s` : '<b style="color:var(--green)">ready</b>'} — ${CRY_DMG} damage to all mobs within ${CRY_RANGE} tiles</div><div class="m">Click the ground to walk, click a mob to attack. Heals during the day.</div>`; }
+  if (selected.kind === 'hero') { const h = S.hero; return `<div class="t">🤠 The Mayor · level ${heroLevel()}</div><div class="m">HP ${Math.ceil(h.hp)}/${h.maxhp} · hits for ${heroDmg()} · next level in ${10 - S.kills % 10} kills</div><div class="m">War Cry <kbd>Q</kbd>: ${h.cry > 0 ? `ready in ${Math.ceil(h.cry)}s` : '<b style="color:var(--green)">ready</b>'} — ${CRY_DMG} damage to all mobs within ${CRY_RANGE} tiles</div><div class="m">Click the ground to walk, click a mob to attack. Heals during the day.</div>`; }
   if (selected.kind === 'building') {
     const b = bld(selected.id); if (!b) { selected = null; return selectionHTML(); }
     const d = DEFS[b.type]; let extra = '';
@@ -647,13 +650,19 @@ function canvasPos(e) {
   const r = canvas.getBoundingClientRect();
   return { x: (e.clientX - r.left) / r.width * canvas.width / T, y: (e.clientY - r.top) / r.height * canvas.height / T };
 }
-canvas.addEventListener('mousemove', e => { const p = canvasPos(e); hover = { x: Math.floor(p.x), y: Math.floor(p.y) }; });
-canvas.addEventListener('mouseleave', () => { hover = { x: -1, y: -1 }; });
+let painting = false;
+canvas.addEventListener('pointermove', e => {
+  const p = canvasPos(e); hover = { x: Math.floor(p.x), y: Math.floor(p.y) };
+  if (painting && buildSel && canPlace(buildSel, hover.x, hover.y)) { tryBuild(buildSel, hover.x, hover.y); updateUI(); }
+});
+window.addEventListener('pointerup', () => { painting = false; });
+canvas.addEventListener('pointerleave', () => { hover = { x: -1, y: -1 }; });
 canvas.addEventListener('contextmenu', e => { e.preventDefault(); selectBuild(null); demolish = false; updateUI(); });
-canvas.addEventListener('mousedown', e => {
+canvas.addEventListener('pointerdown', e => {
   if (e.button !== 0 || S.over) return;
+  e.preventDefault();
   const p = canvasPos(e), gx = Math.floor(p.x), gy = Math.floor(p.y);
-  if (buildSel) { tryBuild(buildSel, gx, gy); if (!e.shiftKey && buildSel !== 'wall') selectBuild(null); updateUI(); return; }
+  if (buildSel) { tryBuild(buildSel, gx, gy); if (DEFS[buildSel].w === 1) painting = true; if (!e.shiftKey && buildSel !== 'wall') selectBuild(null); updateUI(); return; }
   if (demolish) { const b = grid[gy] && grid[gy][gx]; if (b) demolishBuilding(b); updateUI(); return; }
   const m = nearestMob(p, 0.7);
   if (m) { selected = { kind: 'mob', id: m.id }; S.hero.target = m.id; S.hero.tx = null; updateUI(); return; }
