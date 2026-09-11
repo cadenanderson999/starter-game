@@ -52,6 +52,34 @@ const UPGRADES = {
   boots: { name: '👟 Swift boots', desc: '+0.6 walk speed', base: 60, max: 3 },
 };
 const upCost = k => Math.round(UPGRADES[k].base * Math.pow(1.6, S.up[k]));
+const count = t => S.buildings.filter(b => b.type === t).length;
+const QUESTS = [
+  { id: 'house1',  text: 'Build a House',                    reward: { wood: 20 },  check: () => count('house') >= 1 },
+  { id: 'farm1',   text: 'Build a Farm',                     reward: { wood: 20 },  check: () => count('farm') >= 1 },
+  { id: 'tower1',  text: 'Build an Archer Tower',            reward: { gold: 30 },  check: () => count('tower') >= 1 },
+  { id: 'night1',  text: 'Survive the first night',          reward: { gold: 40 },  check: () => S.day >= 2 },
+  { id: 'trees10', text: 'Chop 10 trees',                    reward: { wood: 30 },  check: () => (S.chopped || 0) >= 10 },
+  { id: 'pop6',    text: 'Grow to 6 villagers',              reward: { food: 30 },  check: () => S.villagers.length >= 6 },
+  { id: 'walls20', text: 'Raise 20 wall segments',           reward: { wood: 40 },  check: () => count('wall') >= 20 },
+  { id: 'kills25', text: 'Slay 25 mobs',                     reward: { gold: 50 },  check: () => S.kills >= 25 },
+  { id: 'th2',     text: 'Upgrade the Town Hall to level 2', reward: { gold: 60 },  check: () => S.thLevel >= 2 },
+  { id: 'barracks',text: 'Build a Barracks',                 reward: { food: 30 },  check: () => count('barracks') >= 1 },
+  { id: 'tavern',  text: 'Open a Tavern',                    reward: { gold: 40 },  check: () => count('tavern') >= 1 },
+  { id: 'night5',  text: 'Defeat the Troll King (night 5)',  reward: { gold: 150 }, check: () => S.day >= 6 },
+  { id: 'kills100',text: 'Slay 100 mobs',                    reward: { gold: 100 }, check: () => S.kills >= 100 },
+  { id: 'pop15',   text: 'Grow to 15 villagers',             reward: { gold: 80 },  check: () => S.villagers.length >= 15 },
+  { id: 'th3',     text: 'Upgrade the Town Hall to level 3', reward: { gold: 200 }, check: () => S.thLevel >= 3 },
+  { id: 'night10', text: 'Survive 10 nights',                reward: { gold: 300 }, check: () => S.day >= 11 },
+  { id: 'night20', text: 'Survive 20 nights — a legend',     reward: { gold: 999 }, check: () => S.day >= 21 },
+];
+function checkQuests() {
+  for (const q of QUESTS) {
+    if (S.done.includes(q.id) || !q.check()) continue;
+    S.done.push(q.id); for (const k in q.reward) S.res[k] += q.reward[k];
+    const msg = `✅ Quest done: ${q.text} — ${costStr(q.reward) || `🍞${q.reward.food}`}`;
+    log(msg); S.banner = { text: msg, life: 3.5 }; blip(900, 0.15); setTimeout(() => blip(1200, 0.2), 120);
+  }
+}
 const NAMES = ['Ada', 'Bo', 'Cyrus', 'Dara', 'Eli', 'Fenn', 'Gus', 'Hana', 'Ivo', 'Juno', 'Kai', 'Lulu', 'Milo', 'Nia',
   'Otto', 'Pip', 'Quin', 'Rae', 'Sol', 'Tess', 'Uma', 'Vic', 'Wren', 'Xio', 'Yara', 'Zed', 'Ash', 'Bryn', 'Cole', 'Dove'];
 const CRY_CD = 20, CRY_RANGE = 3, CRY_DMG = 35;
@@ -79,6 +107,7 @@ function costStr(cost) {
   const parts = [];
   if (cost.wood) parts.push(`🪵${cost.wood}`);
   if (cost.gold) parts.push(`🪙${cost.gold}`);
+  if (cost.food) parts.push(`🍞${cost.food}`);
   return parts.join(' ') || 'free';
 }
 const tileAt = (x, y) => (x < 0 || y < 0 || x >= COLS || y >= ROWS) ? null : grid[Math.floor(y)][Math.floor(x)];
@@ -87,7 +116,7 @@ const tileAt = (x, y) => (x < 0 || y < 0 || x >= COLS || y >= ROWS) ? null : gri
 let S = null, grid = null, bmap = null;
 let speed = 1, paused = false, buildSel = null, demolish = false, selected = null;
 let hover = { x: -1, y: -1 }, mouseW = { x: 0, y: 0 }, uiTimer = 0, saveTimer = 0, lastFrame = 0;
-const keys = {}; let firing = false, painting = false;
+const keys = {}; let firing = false, painting = false; const touchVec = { x: 0, y: 0 };
 const cam = { x: COLS / 2, y: ROWS / 2 }; let shakeT = 0, shakeMag = 0;
 function shake(t, mag) { shakeT = Math.max(shakeT, t); shakeMag = Math.max(shakeMag, mag); }
 
@@ -97,7 +126,7 @@ function newState() {
   S = {
     v: 2, nextId: 1, res: { gold: 50, wood: 80, food: 40 }, day: 1, t: 0, thLevel: 1,
     buildings: [], villagers: [], mobs: [], soldiers: [], projs: [], fx: [], log: [],
-    waveQueue: [], arrivalTimer: 0, kills: 0, over: false, banner: null, foodWarned: false, diff: 'normal', up: { gun: 0, vest: 0, boots: 0 }, drops: [], parts: [],
+    waveQueue: [], arrivalTimer: 0, kills: 0, over: false, banner: null, foodWarned: false, diff: 'normal', up: { gun: 0, vest: 0, boots: 0 }, drops: [], parts: [], done: [], chopped: 0, questT: 0,
     hero: { x: hx + 1, y: hy + 3, hp: 150, maxhp: 150, cd: 0, dead: 0, cry: 0, cryFx: 0, face: 1, anim: 0, moving: false },
   };
   S.diff = chosenDiff; rebuildGrid();
@@ -174,7 +203,7 @@ function removeBuilding(b, reason) {
 function damageBuilding(b, dmg) { b.hp -= dmg; if (b.hp <= 0) removeBuilding(b, 'destroyed'); }
 function demolishBuilding(b) {
   if (b.type === 'hall') return toast('You cannot demolish the Town Hall');
-  if (b.type === 'tree') { S.res.wood += 6; fx(b.gx + 0.5, b.gy + 0.3, '+🪵6', '#e8c060'); burst(b.gx + 0.5, b.gy + 0.5, 8, '#3a8a3a'); removeBuilding(b, 'chopped'); blip(300, 0.05); return; }
+  if (b.type === 'tree') { S.res.wood += 6; S.chopped = (S.chopped || 0) + 1; fx(b.gx + 0.5, b.gy + 0.3, '+🪵6', '#e8c060'); burst(b.gx + 0.5, b.gy + 0.5, 8, '#3a8a3a'); removeBuilding(b, 'chopped'); blip(300, 0.05); return; }
   const c = DEFS[b.type].cost; for (const k in c) S.res[k] += Math.floor(c[k] / 2);
   removeBuilding(b, 'demolished'); log(`Demolished a ${DEFS[b.type].name}.`);
 }
@@ -459,8 +488,9 @@ function updateHero(dt) {
     return;
   }
   h.cd -= dt; h.cry = Math.max(0, h.cry - dt); h.cryFx = Math.max(0, h.cryFx - dt); h.flash = Math.max(0, (h.flash || 0) - dt);
-  const dx = (keys.d || keys.ArrowRight ? 1 : 0) - (keys.a || keys.ArrowLeft ? 1 : 0);
-  const dy = (keys.s || keys.ArrowDown ? 1 : 0) - (keys.w || keys.ArrowUp ? 1 : 0);
+  let dx = (keys.d || keys.ArrowRight ? 1 : 0) - (keys.a || keys.ArrowLeft ? 1 : 0);
+  let dy = (keys.s || keys.ArrowDown ? 1 : 0) - (keys.w || keys.ArrowUp ? 1 : 0);
+  if (!dx && !dy && (Math.abs(touchVec.x) > 0.2 || Math.abs(touchVec.y) > 0.2)) { dx = touchVec.x; dy = touchVec.y; }
   h.moving = !!(dx || dy);
   h.dash = Math.max(0, (h.dash || 0) - dt);
   if (h.moving) {
@@ -519,6 +549,7 @@ function update(dt) {
     const tips = [[6, 'Tip: press 1 and click to build a House so villagers move in', () => !has('house')], [26, 'Tip: build a Farm (2) so nobody goes hungry', () => !has('farm')], [48, 'Tip: build an Archer Tower (6) and some Walls (5) before dark', () => !has('tower')], [70, 'Tip: WASD walks the Mayor, left-click shoots, right-click inspects', () => true]];
     for (const [at, text, need] of tips) if (S.t >= at && S.t - dt < at && need()) S.banner = { text, life: 4 };
   }
+  S.questT += dt; if (S.questT > 1) { S.questT = 0; checkQuests(); }
   if (S.res.food < 1 && !S.foodWarned) { S.foodWarned = true; log('⚠️ The granary is empty! Hungry villagers work slowly. Build more farms.'); S.banner = { text: '⚠️ Out of food — build more farms!', life: 3 }; }
   else if (S.res.food > 15) S.foodWarned = false;
   for (const v of S.villagers) updateVillager(v, dt);
@@ -547,7 +578,7 @@ function load() {
   try {
     const raw = localStorage.getItem(SAVE_KEY); if (!raw) return false;
     const st = JSON.parse(raw); if (!st || st.v !== 2 || st.over) return false;
-    S = st; S.up = S.up || { gun: 0, vest: 0, boots: 0 }; S.drops = S.drops || []; S.parts = []; S.diff = S.diff || 'normal'; rebuildGrid(); cam.x = S.hero.x; cam.y = S.hero.y; paintGround(); return true;
+    S = st; S.done = S.done || []; S.chopped = S.chopped || 0; S.questT = 0; S.up = S.up || { gun: 0, vest: 0, boots: 0 }; S.drops = S.drops || []; S.parts = []; S.diff = S.diff || 'normal'; rebuildGrid(); cam.x = S.hero.x; cam.y = S.hero.y; paintGround(); return true;
   } catch (e) { return false; }
 }
 function hasSave() { try { const r = localStorage.getItem(SAVE_KEY); if (!r) return false; const s = JSON.parse(r); return s && s.v === 2 && !s.over; } catch (e) { return false; } }
@@ -943,6 +974,8 @@ function updateUI() {
   $('#btn-demolish').classList.toggle('on', demolish);
   for (const k in UPGRADES) { const u = UPGRADES[k], btn = $('#up-' + k); const maxed = S.up[k] >= u.max; btn.disabled = maxed || S.res.gold < upCost(k); btn.querySelector('.n').textContent = `${u.name} ${'★'.repeat(S.up[k])}`; btn.querySelector('small').textContent = maxed ? 'max level' : `${u.desc} · 🪙${upCost(k)}`; }
   $('#log').innerHTML = S.log.slice(0, 12).map(m => `<div>${m}</div>`).join('');
+  const open = QUESTS.filter(q => !S.done.includes(q.id)).slice(0, 3);
+  $('#quests').innerHTML = (open.map(q => `<div>☐ ${q.text} <small>${costStr(q.reward) || `🍞${q.reward.food}`}</small></div>`).join('') || '<div>🏆 Every quest complete!</div>') + `<div class="m">${S.done.length}/${QUESTS.length} done</div>`;
   $('#sel').innerHTML = selectionHTML();
 }
 function needBar(label, val) { return `<div class="need"><span>${label}</span><div class="b"><i class="${val < 30 ? 'low' : ''}" style="width:${val}%"></i></div></div>`; }
@@ -1018,6 +1051,23 @@ document.addEventListener('keydown', e => {
 });
 document.addEventListener('keyup', e => { keys[keyName(e)] = false; });
 window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; firing = false; });
+// on-screen controls for touch devices
+(function touchSetup() {
+  const coarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+  const box = $('#touch'); if (!box) return; box.hidden = !coarse; if (!coarse) return;
+  const joy = $('#joy'), knob = $('#knob'); let jid = null;
+  const setKnob = (x, y) => { knob.style.transform = `translate(${x * 30}px, ${y * 30}px)`; };
+  joy.addEventListener('pointerdown', e => { jid = e.pointerId; joy.setPointerCapture(jid); });
+  joy.addEventListener('pointermove', e => {
+    if (e.pointerId !== jid) return; const r = joy.getBoundingClientRect();
+    let x = (e.clientX - r.left - r.width / 2) / (r.width / 2), y = (e.clientY - r.top - r.height / 2) / (r.height / 2);
+    const d = Math.hypot(x, y); if (d > 1) { x /= d; y /= d; } touchVec.x = x; touchVec.y = y; setKnob(x, y);
+  });
+  const end = e => { if (e.pointerId !== jid) return; jid = null; touchVec.x = touchVec.y = 0; setKnob(0, 0); };
+  joy.addEventListener('pointerup', end); joy.addEventListener('pointercancel', end);
+  $('#t-cry').addEventListener('pointerdown', e => { e.preventDefault(); warCry(); });
+  $('#t-dash').addEventListener('pointerdown', e => { e.preventDefault(); keys.Shift = true; setTimeout(() => { keys.Shift = false; }, 150); });
+})();
 function setSpeed(s) {
   paused = s === 0; if (s > 0) speed = s;
   for (const b of document.querySelectorAll('#speed button')) b.classList.toggle('on', +b.dataset.speed === s);

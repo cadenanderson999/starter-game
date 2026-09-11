@@ -47,7 +47,15 @@ kbd { background: var(--bg); border: 1px solid var(--line); border-radius: 4px; 
 .need .b { flex: 1; height: 6px; background: var(--bg); border-radius: 3px; overflow: hidden; }
 .need .b i { display: block; height: 100%; background: var(--green); }
 .need .b i.low { background: var(--red); }
-#log { max-height: 260px; overflow-y: auto; }
+#log { max-height: 220px; overflow-y: auto; }
+#quests div { padding: 2px 0; }
+#quests small { color: var(--muted); float: right; }
+#touch { position: absolute; inset: 0; pointer-events: none; }
+#joy { position: absolute; left: 24px; bottom: 24px; width: 120px; height: 120px; border-radius: 50%; background: #0006;
+  border: 2px solid #fff4; pointer-events: auto; touch-action: none; }
+#knob { position: absolute; left: 35px; top: 35px; width: 50px; height: 50px; border-radius: 50%; background: #fffa; }
+.tbtns { position: absolute; right: 24px; bottom: 24px; display: flex; gap: 12px; pointer-events: auto; }
+.tbtns button { width: 64px; height: 64px; border-radius: 50%; font-size: 26px; background: #0008; border: 2px solid #fff4; touch-action: none; }
 #log div { padding: 2px 0; border-bottom: 1px solid var(--line); color: var(--muted); }
 #log div:first-child { color: var(--text); }
 #gameover[hidden] { display: none; }

@@ -53,11 +53,17 @@
     <div id="stage">
       <canvas id="c" width="960" height="640"></canvas>
       <canvas id="mini" width="128" height="96" title="Minimap"></canvas>
+      <div id="touch" hidden>
+        <div id="joy"><div id="knob"></div></div>
+        <div class="tbtns"><button id="t-dash">💨</button><button id="t-cry">📣</button></div>
+      </div>
     </div>
 
     <aside id="info">
       <h3>Selected</h3>
       <div id="sel" class="panel"><i>Nothing selected. Click a building, villager, or mob.</i></div>
+      <h3>Quests</h3>
+      <div id="quests" class="panel"></div>
       <h3>Town log</h3>
       <div id="log" class="panel"></div>
       <button id="btn-new" class="tool danger">🗑️ Abandon town (new game)</button>

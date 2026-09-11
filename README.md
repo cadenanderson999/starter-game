@@ -34,6 +34,9 @@ Then open <http://localhost:8765>. Progress autosaves in your browser.
 | ⚔️ Barracks | 60 wood, 60 gold | Trains 3 soldiers (Town Hall lv2) |
 | 🍺 Tavern | 30 wood, 40 gold | Villagers have fun here (Town Hall lv2) |
 
+A quest list in the side panel hands out rewards for milestones — first house, first night survived,
+25 kills, the Troll King, and so on. On touch screens an on-screen joystick and dash/war-cry buttons appear.
+
 Villagers arrive on their own while you have spare housing. Each one picks the nearest unstaffed
 farm, mill or mine and works it. They have three needs — **food, energy, fun** — and their happiness
 sets how fast they work (50 % to 100 %). They eat from the town food stock, sleep in houses at night,
