@@ -17,7 +17,9 @@ No build step, no dependencies, no internet needed. Open `index.html` and play.
 python3 -m http.server 8765
 ```
 
-Then open <http://localhost:8765>. Progress autosaves in your browser.
+Then open <http://localhost:8765>. Progress autosaves in your browser. When served over HTTP (for example
+from GitHub Pages) a service worker caches the game, so it keeps working with no connection and can be
+installed to the home screen.
 
 ## How it works
 
@@ -75,6 +77,7 @@ Three files, zero dependencies:
 
 - `index.html` — layout and menus
 - `style.css` — the look
+- `sw.js` / `manifest.json` — offline cache and install metadata
 - `game.js` — data tables (`DEFS`, `MOBS`, `TH_LEVELS`), pixel sprite generator (`buildSprites`), simulation, camera renderer, DOM UI and save/load
 
 Tuning knobs live at the top of `game.js`: world size, zoom, day/night length, building stats, mob stats and the

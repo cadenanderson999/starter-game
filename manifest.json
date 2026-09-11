@@ -1,0 +1,10 @@
+{
+  "name": "Hollowmere",
+  "short_name": "Hollowmere",
+  "description": "Build a town by day. Survive the raids by night.",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#171a21",
+  "theme_color": "#171a21",
+  "icons": [{ "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23171a21'/%3E%3Ctext x='32' y='44' font-size='36' text-anchor='middle'%3E%F0%9F%8F%98%EF%B8%8F%3C/text%3E%3C/svg%3E", "sizes": "any", "type": "image/svg+xml" }]
+}
