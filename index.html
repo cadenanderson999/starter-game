@@ -15,6 +15,7 @@
     <div class="res" title="Food">🍞 <b id="r-food">0</b></div>
     <div class="res" title="Villagers / housing">🧑‍🌾 <b id="r-pop">0/0</b></div>
     <div class="res" title="Average happiness">😊 <b id="r-happy">0%</b></div>
+    <div class="res" title="Mayor health">🤠 <b id="r-hp">150/150</b></div>
     <div class="spacer"></div>
     <div id="clock">Day 1</div>
     <div id="next" class="res" title="What the next raid brings"></div>
@@ -37,14 +38,17 @@
       <button id="btn-demolish" class="tool" title="Demolish (X)">🧨 Demolish <small>50% refund</small></button>
       <div class="hint">
         <b>How to play</b><br>
-        Pick a building and click the map to place it. Hold and drag to paint a line of walls. Villagers arrive when you have housing and go to work on their own. Keep them fed and amused.<br><br>
-        At night, mobs raid from the edges of the map and smash whatever they reach. Walls slow them down, towers shoot them, soldiers and your Mayor 🤠 fight them. Click the ground to move the Mayor, click a mob to attack it, press <kbd>Q</kbd> for a War Cry.<br><br>
+        <kbd>WASD</kbd> walk the Mayor around. The camera follows.<br>
+        Pick a building and click the map to place it. Hold and drag to paint a line of walls. Chop trees with Demolish for wood.<br><br>
+        Villagers arrive when you have housing and go to work on their own. Keep them fed and amused.<br><br>
+        At night, mobs raid from the edges of the forest. Walls slow them down, towers shoot them, soldiers fight them, and you <b>left-click to shoot</b>. <kbd>Q</kbd> is your War Cry. <b>Right-click</b> anything to inspect it.<br><br>
         <b>Lose the Town Hall and the town falls.</b>
       </div>
     </aside>
 
     <div id="stage">
-      <canvas id="c" width="896" height="640"></canvas>
+      <canvas id="c" width="960" height="640"></canvas>
+      <canvas id="mini" width="128" height="96" title="Minimap"></canvas>
     </div>
 
     <aside id="info">
@@ -62,8 +66,8 @@
     <h1>🏘️ Hollowmere</h1>
     <p class="tag">Build a town by day. Survive the raids by night.</p>
     <p>You start with a Town Hall, two villagers, and a small pile of wood. Build houses so villagers move in, farms so they eat, mills and mines for materials. Villagers have needs — hunger, energy and fun — and happy villagers work faster.</p>
-    <p>Every night mobs 👺👹🧌 come to wreck your town. Fortify with walls, archer towers, barracks, and lead the fight yourself as the Mayor 🤠.</p>
-    <p class="keys"><kbd>1</kbd>–<kbd>8</kbd> pick a building · <kbd>Esc</kbd> cancel · <kbd>Space</kbd> pause · <kbd>X</kbd> demolish · <kbd>R</kbd> repair · <kbd>Q</kbd> Mayor's War Cry · <kbd>M</kbd> mute</p>
+    <p>Every night goblins, orcs and trolls come out of the forest to wreck your town. Fortify with walls, archer towers and barracks, and lead the fight yourself as the Mayor 🤠 — walk with <kbd>WASD</kbd>, shoot with the mouse.</p>
+    <p class="keys"><kbd>WASD</kbd> move · left-click shoot / place · right-click inspect · <kbd>1</kbd>–<kbd>8</kbd> pick a building · <kbd>Esc</kbd> cancel · <kbd>Space</kbd> pause · <kbd>X</kbd> demolish / chop · <kbd>R</kbd> repair · <kbd>Q</kbd> War Cry · <kbd>M</kbd> mute</p>
     <div class="row">
       <button id="btn-continue" class="big">▶ Continue town</button>
       <button id="btn-start" class="big">🌱 New town</button>
