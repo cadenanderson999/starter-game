@@ -10,7 +10,13 @@ so there are no image files and nothing to download.
 
 No build step, no dependencies, no internet needed. Open `index.html` and play.
 
-![Hollowmere at dusk](docs/screenshot.jpg)
+![Hollowmere by day](docs/shot-day.jpg)
+
+*Day: lay out the town.*
+
+![A night raid on Hollowmere](docs/shot-night.jpg)
+
+*Night: goblins, orcs, a shaman and bombers come out of the forest.*
 
 ## Play
 

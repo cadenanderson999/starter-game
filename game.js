@@ -1106,6 +1106,12 @@ function draw() {
   // particles
   for (const p of S.parts) { const [sx, sy] = W2S(p.x, p.y); ctx.globalAlpha = clamp(p.life * 2, 0, 1); ctx.fillStyle = p.color; ctx.fillRect(sx - 2, sy - 2, 4, 4); }
   ctx.globalAlpha = 1;
+  // golden hour: a warm wash over the whole scene as the sun drops
+  const gh = S.t > DAY_LEN - 26 && S.t < DAY_LEN ? Math.min(1, (S.t - (DAY_LEN - 26)) / 18) : S.t > CYCLE - 10 ? (CYCLE - S.t) / 10 : 0;
+  if (gh > 0) {
+    ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = `rgba(150,74,16,${0.34 * gh})`; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.globalCompositeOperation = 'source-over';
+  }
   // night: darkness layer with light holes
   const dk = darkness();
   if (dk > 0) {
@@ -1115,14 +1121,16 @@ function draw() {
     if (S.hero.dead <= 0) light(S.hero.x, S.hero.y, 5 * TS, 0.9);
     for (const t of ['hall', 'tower', 'tavern', 'house']) for (const b of ofType(t)) {
       const c = center(b); if (c.x < x0 - 6 || c.x > x1 + 6 || c.y < y0 - 6 || c.y > y1 + 6) continue;
-      light(c.x, c.y, (b.type === 'hall' ? 6 : b.type === 'house' ? 2.5 : 4) * TS, b.type === 'house' ? 0.5 : 0.8);
+      const fl = 0.93 + Math.sin(performance.now() / 110 + b.id * 1.7) * 0.05 + Math.sin(performance.now() / 41 + b.id) * 0.02;
+      light(c.x, c.y, (b.type === 'hall' ? 6 : b.type === 'house' ? 2.5 : 4) * TS * fl, b.type === 'house' ? 0.5 : 0.8);
     }
     ctx.drawImage(dark, 0, 0);
     ctx.globalCompositeOperation = 'lighter';
     for (const t of ['hall', 'tower', 'tavern']) for (const b of ofType(t)) {
       const c = center(b); const [sx, sy] = W2S(c.x, c.y); const r = 2.5 * TS;
       if (sx < -r || sx > canvas.width + r || sy < -r || sy > canvas.height + r) continue;
-      const g = ctx.createRadialGradient(sx, sy, 2, sx, sy, r); g.addColorStop(0, `rgba(255,170,60,${0.25 * dk})`); g.addColorStop(1, 'rgba(255,170,60,0)');
+      const fl = 0.85 + Math.sin(performance.now() / 90 + b.id * 2.1) * 0.1 + Math.sin(performance.now() / 37 + b.id) * 0.05;
+      const g = ctx.createRadialGradient(sx, sy, 2, sx, sy, r * fl); g.addColorStop(0, `rgba(255,170,60,${0.25 * dk * fl})`); g.addColorStop(1, 'rgba(255,170,60,0)');
       ctx.fillStyle = g; ctx.fillRect(sx - r, sy - r, r * 2, r * 2);
     }
     ctx.globalCompositeOperation = 'source-over';
