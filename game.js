@@ -103,6 +103,21 @@ function moveToward(e, tx, ty, spd, dt) {
   if (d <= step) { e.x = tx; e.y = ty; return true; }
   e.x += dx / d * step; e.y += dy / d * step; if (Math.abs(dx) > 0.05) e.face = dx < 0 ? -1 : 1; return false;
 }
+// Villagers walk around walls and buildings rather than through them. If one is
+// wedged for a few seconds (a wall dropped across its doorway, say) it squeezes
+// past instead of standing there forever.
+function moveTowardSolid(e, tx, ty, spd, dt) {
+  const dx = tx - e.x, dy = ty - e.y, d = Math.hypot(dx, dy), step = spd * dt;
+  if (d <= step) { e.x = tx; e.y = ty; e.stuck = 0; return true; }
+  const ox = e.x, oy = e.y, ux = dx / d * step, uy = dy / d * step;
+  stepBlocked(e, ux, uy, null, true);
+  if (Math.hypot(e.x - ox, e.y - oy) < step * 0.35) {
+    e.stuck = (e.stuck || 0) + dt;
+    if (e.stuck > 3) { e.x = clamp(ox + ux, 0.2, COLS - 0.2); e.y = clamp(oy + uy, 0.2, ROWS - 0.2); }
+  } else e.stuck = 0;
+  if (Math.abs(dx) > 0.05) e.face = dx < 0 ? -1 : 1;
+  return false;
+}
 function canAfford(cost) { return Object.keys(cost).every(k => S.res[k] >= cost[k]); }
 function pay(cost) { for (const k in cost) S.res[k] -= cost[k]; }
 function costStr(cost) {
@@ -274,10 +289,10 @@ function updateVillager(v, dt) {
         const p = door(hall());
         v.tx = clamp(p.x + rnd(-3, 3), 0.3, COLS - 0.3); v.ty = clamp(p.y + rnd(-1, 3), 0.3, ROWS - 0.3); v.wt = rnd(2, 5);
       }
-      if (moveToward(v, v.tx, v.ty, 1.2, dt)) v.tx = null;
+      if (moveTowardSolid(v, v.tx, v.ty, 1.2, dt)) v.tx = null;
       break;
     }
-    case 'toWork': { const b = bld(v.job); if (!b) { v.state = 'idle'; break; } const p = door(b); if (moveToward(v, p.x, p.y, 1.6, dt)) v.state = 'working'; break; }
+    case 'toWork': { const b = bld(v.job); if (!b) { v.state = 'idle'; break; } const p = door(b); if (moveTowardSolid(v, p.x, p.y, 1.6, dt)) v.state = 'working'; break; }
     case 'working': {
       const b = bld(v.job); if (!b) { v.state = 'idle'; break; }
       S.res[DEFS[b.type].prod] += DEFS[b.type].rate * productivity(v) * dt;
@@ -286,11 +301,11 @@ function updateVillager(v, dt) {
     }
     case 'toHome': {
       const h = bld(v.home); if (!h) { goHome(v); if (!bld(v.home)) v.state = 'sleeping'; break; }
-      const p = door(h); if (moveToward(v, p.x, p.y, 1.8, dt)) v.state = 'sleeping';
+      const p = door(h); if (moveTowardSolid(v, p.x, p.y, 1.8, dt)) v.state = 'sleeping';
       break;
     }
     case 'sleeping': { v.energy = clamp(v.energy + 3 * dt, 0, 100); if (!night && v.energy >= 90) { v.state = 'idle'; v.tx = null; } break; }
-    case 'toFun': { const tv = tavern(); if (!tv) { v.state = 'idle'; break; } const p = door(tv); if (moveToward(v, p.x, p.y, 1.6, dt)) v.state = 'fun'; break; }
+    case 'toFun': { const tv = tavern(); if (!tv) { v.state = 'idle'; break; } const p = door(tv); if (moveTowardSolid(v, p.x, p.y, 1.6, dt)) v.state = 'fun'; break; }
     case 'fun': { v.fun = clamp(v.fun + 6 * dt, 0, 100); if (v.fun >= 95 || !tavern()) v.state = 'idle'; break; }
   }
   v.moving = ox !== v.x || oy !== v.y; if (v.moving) v.anim += dt * 8;
@@ -475,10 +490,10 @@ function updateSoldier(s, dt) {
   let m = mob(s.target); if (!m) { m = nearestMob(s, 8); s.target = m ? m.id : null; }
   if (m) {
     if (dist(s, m) <= 0.9) { if (s.cd <= 0) { damageMob(m, 8, s); s.cd = 0.6; } }
-    else moveToward(s, m.x, m.y, 2.4, dt);
+    else moveTowardSolid(s, m.x, m.y, 2.4, dt);
   } else {
     const h = bld(s.home) || hall();
-    if (h) { const p = door(h); if (dist(s, p) > 1.2) moveToward(s, p.x, p.y, 2, dt); }
+    if (h) { const p = door(h); if (dist(s, p) > 1.2) moveTowardSolid(s, p.x, p.y, 2, dt); }
     if (!isNight()) s.hp = clamp(s.hp + 3 * dt, 0, s.maxhp);
   }
   s.moving = ox !== s.x || oy !== s.y; if (s.moving) s.anim += dt * 8;

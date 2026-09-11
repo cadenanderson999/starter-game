@@ -31,6 +31,10 @@ installed to the home screen.
 
 ## How it works
 
+The map is a 64×48 tile forest with dirt roads running out of town to the map edge,
+boulders, log piles and bushes scattered through the trees, and a day/night cycle with
+golden-hour light and torches burning after dark.
+
 **Day (90 s)** — place buildings, chop trees for wood, keep villagers happy.
 
 | Building | Cost | Does |
@@ -47,6 +51,11 @@ installed to the home screen.
 
 A quest list in the side panel hands out rewards for milestones — first house, first night survived,
 25 kills, the Troll King, and so on. On touch screens an on-screen joystick and dash/war-cry buttons appear.
+
+Walls stop villagers, soldiers and the Mayor as well as raiders, so leave a **Gate**: your
+own people walk through it, raiders have to break it down. Raiders try to walk around
+walls, but once they stop making progress for a few seconds they commit and smash
+straight through, so a sealed ring buys time rather than safety.
 
 Villagers arrive on their own while you have spare housing. Each one picks the nearest unstaffed
 farm, mill or mine and works it. They have three needs — **food, energy, fun** — and their happiness
