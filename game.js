@@ -696,11 +696,37 @@ function noise(len, vol, freq) {
   } catch (e) { /* no audio */ }
 }
 const boom = () => noise(0.5, 0.12, 400);
+// Two quiet looping beds — rain, and a low drone that swells after dark. Built from
+// an oscillator pair and a noise buffer, so there are still no audio files to ship.
+let amb = null;
+function ambienceInit() {
+  if (amb || !actx) return;
+  try {
+    const buf = actx.createBuffer(1, actx.sampleRate * 2, actx.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    const src = actx.createBufferSource(); src.buffer = buf; src.loop = true;
+    const lp = actx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1500;
+    const rain = actx.createGain(); rain.gain.value = 0;
+    src.connect(lp); lp.connect(rain); rain.connect(actx.destination); src.start();
+    const o1 = actx.createOscillator(); o1.type = 'sine'; o1.frequency.value = 55;
+    const o2 = actx.createOscillator(); o2.type = 'sine'; o2.frequency.value = 82.4;
+    const night = actx.createGain(); night.gain.value = 0;
+    o1.connect(night); o2.connect(night); night.connect(actx.destination); o1.start(); o2.start();
+    amb = { rain, night };
+  } catch (e) { amb = null; }
+}
+function ambienceUpdate() {
+  if (!amb || !actx || !S) return;
+  const t = actx.currentTime;
+  amb.rain.gain.setTargetAtTime(!muted && S.weather === 'rain' ? 0.045 : 0, t, 0.9);
+  amb.night.gain.setTargetAtTime(!muted && !S.over ? darkness() * 0.055 : 0, t, 1.4);
+}
 const horn = () => { blip(196, 0.5); setTimeout(() => blip(147, 0.8), 350); };
 function blip(freq, len) {
   if (muted) return;
   try {
     if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+    ambienceInit();
     const o = actx.createOscillator(), g = actx.createGain();
     o.type = 'triangle'; o.frequency.value = freq; g.gain.value = 0.04;
     o.connect(g); g.connect(actx.destination); o.start();
@@ -1483,6 +1509,7 @@ window.addEventListener('beforeunload', () => { if (S && !S.over) save(); });
 
 // ---------------------------------------------------------------- boot
 function startGame(fresh) {
+  try { if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)(); if (actx.state === 'suspended') actx.resume(); ambienceInit(); } catch (e) { /* no audio */ }
   if (fresh || !load()) newState();
   $('#overlay').style.display = 'none';
   buildSel = null; demolish = false; selected = null; setSpeed(1); resize(); updateUI();
@@ -1498,7 +1525,7 @@ function frame(now) {
     }
     cam.x = clamp(cam.x, Math.min(vw / 2, COLS / 2), Math.max(COLS - vw / 2, COLS / 2)); cam.y = clamp(cam.y, Math.min(vh / 2, ROWS / 2), Math.max(ROWS - vh / 2, ROWS / 2));
     if (shakeT > 0) { shakeT -= raw; if (shakeT <= 0) shakeMag = 0; }
-    uiTimer += raw; if (uiTimer > 0.25) { uiTimer = 0; updateUI(); }
+    uiTimer += raw; if (uiTimer > 0.25) { uiTimer = 0; updateUI(); ambienceUpdate(); }
     saveTimer += raw; if (saveTimer > 5) { saveTimer = 0; if (!S.over) save(); }
     draw();
   }
