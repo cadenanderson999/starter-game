@@ -21,16 +21,18 @@ const DEFS = {
               desc: 'A villager digs gold here. Gold pays for towers, barracks and upgrades.' },
   wall:     { name: 'Wall',         icon: '🧱', w: 1, h: 1, hp: 300, cost: { wood: 8 }, key: '5', mini: '#8c8c96',
               desc: 'Cheap and tough. Mobs must chew through any wall in their way.' },
-  tower:    { name: 'Archer Tower', icon: '🏹', w: 1, h: 1, hp: 200, cost: { wood: 30, gold: 30 }, range: 5, dmg: 10, rof: 0.7, key: '6', mini: '#6a7fd8',
+  gate:     { name: 'Gate',         icon: '🚪', w: 1, h: 1, hp: 220, cost: { wood: 15, gold: 10 }, key: '6', mini: '#b08a4a',
+              desc: 'A wall your own people can walk through. Mobs have to break it down.' },
+  tower:    { name: 'Archer Tower', icon: '🏹', w: 1, h: 1, hp: 200, cost: { wood: 30, gold: 30 }, range: 5, dmg: 10, rof: 0.7, key: '7', mini: '#6a7fd8',
               desc: 'Shoots any mob within 5 tiles. Your best friend at night.' },
-  barracks: { name: 'Barracks',     icon: '⚔️', w: 2, h: 2, hp: 250, cost: { wood: 60, gold: 60 }, th: 2, soldiers: 3, key: '7', mini: '#c06060',
+  barracks: { name: 'Barracks',     icon: '⚔️', w: 2, h: 2, hp: 250, cost: { wood: 60, gold: 60 }, th: 2, soldiers: 3, key: '8', mini: '#c06060',
               desc: 'Trains up to 3 soldiers (10 food each) who guard the town and hunt mobs.' },
-  tavern:   { name: 'Tavern',       icon: '🍺', w: 1, h: 1, hp: 150, cost: { wood: 30, gold: 40 }, th: 2, fun: true, key: '8', mini: '#c080c0',
+  tavern:   { name: 'Tavern',       icon: '🍺', w: 1, h: 1, hp: 150, cost: { wood: 30, gold: 40 }, th: 2, fun: true, key: '9', mini: '#c080c0',
               desc: 'Villagers come here to have fun. Happy villagers work up to twice as fast.' },
   tree:     { name: 'Pine Tree',    icon: '🌲', w: 1, h: 1, hp: 40, cost: {}, tree: true, mini: '#2f6b34',
               desc: 'Blocks building and walking. Chop it down (Demolish) for 6 wood. Mobs trample through forests slowly.' },
 };
-const BUILD_ORDER = ['house', 'farm', 'mill', 'mine', 'wall', 'tower', 'barracks', 'tavern'];
+const BUILD_ORDER = ['house', 'farm', 'mill', 'mine', 'wall', 'gate', 'tower', 'barracks', 'tavern'];
 const TH_LEVELS = [
   { cost: {},                       hp: 600,  cap: 4 },
   { cost: { wood: 150, gold: 150 }, hp: 1000, cap: 6 },
@@ -330,9 +332,9 @@ function pickTarget(m) {
   let best = null, bd = 1e9;
   for (const b of S.buildings) {
     if (b.type === 'tree') continue;
-    if (b.type === 'wall' && !MOBS[m.type].bomb) continue;
+    if ((b.type === 'wall' || b.type === 'gate') && !MOBS[m.type].bomb) continue;
     let d = rectDist(m, b);
-    if (MOBS[m.type].bomb && (b.type === 'wall' || b.type === 'tower')) d *= 0.4;
+    if (MOBS[m.type].bomb && (b.type === 'wall' || b.type === 'gate' || b.type === 'tower')) d *= 0.4;
     if (m.type === 'goblin' && (DEFS[b.type].prod || b.type === 'house')) d *= 0.6;
     if ((m.type === 'troll' || m.type === 'king') && (b.type === 'tower' || b.type === 'hall' || b.type === 'barracks')) d *= 0.5;
     if (d < bd) { bd = d; best = b; }
@@ -355,13 +357,13 @@ function damageMob(m, dmg, byUnit) {
   }
 }
 // axis-separated step that refuses to enter occupied tiles; returns the blocking building (if any)
-function stepBlocked(e, ux, uy, passTarget) {
+function stepBlocked(e, ux, uy, passTarget, friendly) {
   const tries = [[ux, uy]]; if (Math.abs(ux) > 1e-4) tries.push([ux, 0]); if (Math.abs(uy) > 1e-4) tries.push([0, uy]);
   let firstBlock = null;
   for (const [mx, my] of tries) {
     const nx = clamp(e.x + mx, 0.2, COLS - 0.2), ny = clamp(e.y + my, 0.2, ROWS - 0.2);
     const b = tileAt(nx, ny);
-    if (!b || b === passTarget) { e.x = nx; e.y = ny; if (Math.abs(ux) > 0.001) e.face = ux < 0 ? -1 : 1; return null; }
+    if (!b || b === passTarget || (friendly && b.type === 'gate')) { e.x = nx; e.y = ny; if (Math.abs(ux) > 0.001) e.face = ux < 0 ? -1 : 1; return null; }
     if (!firstBlock) firstBlock = b;
   }
   return firstBlock;
@@ -384,9 +386,22 @@ function updateMob(m, dt) {
     }
     if (da > 3) m.attacker = null;
   }
-  if (!m.target || !bld(m.target) || m.retarget <= 0) { const t = pickTarget(m); m.target = t ? t.id : null; m.retarget = 3; }
+  if (!m.target || !bld(m.target) || m.retarget <= 0) {
+    const t = pickTarget(m); if (!t || t.id !== m.target) m.bestD = null;
+    m.target = t ? t.id : null; m.retarget = 3;
+  }
   const tgt = bld(m.target); if (!tgt) return;
-  if (m.blocker && (!bld(m.blocker) || rectDist(m, bld(m.blocker)) > 0.8)) m.blocker = null;
+  if (m.blocker && (!bld(m.blocker) || rectDist(m, bld(m.blocker)) > 1)) m.blocker = null;
+  // Raiders slide along obstacles to find a way round. If that stops getting them
+  // closer for a few seconds — a ring of walls, say — they give up and smash
+  // through whatever is directly in front of them.
+  const td = rectDist(m, tgt);
+  if (m.bestD == null || td < m.bestD - 0.05) { m.bestD = td; m.stall = 0; } else m.stall = (m.stall || 0) + dt;
+  if (!m.blocker && m.stall > 2.5) {
+    const tc = center(tgt), vx = tc.x - m.x, vy = tc.y - m.y, vd = Math.hypot(vx, vy) || 1;
+    const ahead = tileAt(m.x + vx / vd * 0.7, m.y + vy / vd * 0.7);
+    if (ahead && ahead !== tgt) { m.blocker = ahead.id; m.stall = 0; m.bestD = null; }
+  }
   const atk = bld(m.blocker) || (rectDist(m, tgt) < 0.7 ? tgt : null);
   const def = MOBS[m.type];
   if (def.ranged && rectDist(m, tgt) <= def.ranged && !(atk && atk.type === 'tree')) {   // shaman lobs fire from a distance
@@ -520,8 +535,8 @@ function updateHero(dt) {
   h.dash = Math.max(0, (h.dash || 0) - dt);
   if (h.moving) {
     const d = Math.hypot(dx, dy); const step = heroSpeed() * dt;
-    stepBlocked(h, dx / d * step, dy / d * step, null); h.anim += dt * 9;
-    if ((keys.Shift) && h.dash <= 0) { h.dash = DASH_CD; for (let i = 0; i < 12; i++) { burst(h.x, h.y + 0.3, 1, '#c8b890'); if (stepBlocked(h, dx / d * DASH_DIST / 12, dy / d * DASH_DIST / 12, null)) break; } blip(500, 0.08); }
+    stepBlocked(h, dx / d * step, dy / d * step, null, true); h.anim += dt * 9;
+    if ((keys.Shift) && h.dash <= 0) { h.dash = DASH_CD; for (let i = 0; i < 12; i++) { burst(h.x, h.y + 0.3, 1, '#c8b890'); if (stepBlocked(h, dx / d * DASH_DIST / 12, dy / d * DASH_DIST / 12, null, true)) break; } blip(500, 0.08); }
   }
   if (firing) fireAt(mouseW.x, mouseW.y);
   if (!isNight() || !nearestMob(h, 6)) h.hp = clamp(h.hp + 2 * dt, 0, h.maxhp);
@@ -756,6 +771,15 @@ function buildSprites() {
     for (let y = 0; y < PX; y += 4) { R(g, 0, y, PX, 1, '#5e5e68'); const off = (y / 4) % 2 ? 4 : 0; for (let x = off; x < PX; x += 8) R(g, x, y, 1, 4, '#5e5e68'); }
     P(g, 2, 2, '#a0a0aa'); P(g, 10, 6, '#a0a0aa'); P(g, 6, 10, '#a0a0aa'); P(g, 13, 13, '#7a7a84');
   });
+  SPR.gate = mk(PX, PX, g => {
+    R(g, 0, 0, 3, PX, '#8c8c96'); R(g, 13, 0, 3, PX, '#8c8c96');
+    for (let y = 0; y < PX; y += 4) { R(g, 0, y, 3, 1, '#5e5e68'); R(g, 13, y, 3, 1, '#5e5e68'); }
+    R(g, 3, 2, 10, 13, '#8a6a48');
+    for (let x = 4; x < 13; x += 3) R(g, x, 2, 1, 13, '#6f5338');
+    R(g, 3, 4, 10, 1, '#a37a52'); R(g, 3, 11, 10, 1, '#a37a52');
+    R(g, 3, 0, 10, 2, '#5a3a22');
+    P(g, 6, 8, '#3a2a1a'); P(g, 9, 8, '#3a2a1a'); P(g, 7, 8, '#e8c040'); P(g, 8, 8, '#e8c040');
+  });
   SPR.tower = mk(PX, 24, g => {
     R(g, 2, 23, 12, 1, 'rgba(0,0,0,.25)');
     R(g, 3, 8, 10, 16, '#8c8c96'); R(g, 3, 8, 1, 16, '#6e6e78'); R(g, 12, 8, 1, 16, '#a0a0aa');
@@ -870,7 +894,7 @@ function flashOver(img, wx, wy, flip, alpha) {
 }
 function buildShadows() {
   SHADOW.map = new Map();
-  for (const t of ['house', 'farm', 'mill', 'mine', 'wall', 'tower', 'barracks', 'tavern', 'hall', 'tree', 'prop']) {
+  for (const t of ['house', 'farm', 'mill', 'mine', 'wall', 'gate', 'tower', 'barracks', 'tavern', 'hall', 'tree', 'prop']) {
     const sp = SPR[t];
     for (const img of Array.isArray(sp) ? sp : [sp]) SHADOW.map.set(img, silhouette(img));
   }
@@ -984,7 +1008,7 @@ function repaintRegion(x0, y0, x1, y1) {
     for (let x = Math.max(0, x0); x <= Math.min(COLS - 1, x1); x++) paintTile(x, y);
 }
 function markDirt(b, repaint = true) {
-  const m = b.type === 'wall' ? 0 : 1;
+  const m = (b.type === 'wall' || b.type === 'gate') ? 0 : 1;
   for (let y = b.gy - m; y < b.gy + b.h + m; y++) for (let x = b.gx - m; x < b.gx + b.w + m; x++) {
     if (x < 0 || y < 0 || x >= COLS || y >= ROWS) continue;
     const inside = x >= b.gx && x < b.gx + b.w && y >= b.gy && y < b.gy + b.h;
@@ -1011,8 +1035,17 @@ const canvas = $('#c'), ctx = canvas.getContext('2d');
 const mini = $('#mini'), mctx = mini.getContext('2d');
 const dark = document.createElement('canvas'); const dctx = dark.getContext('2d');
 const miniBase = document.createElement('canvas'); miniBase.width = 128; miniBase.height = 96; const mbctx = miniBase.getContext('2d');
-function resize() { const st = $('#stage'); canvas.width = st.clientWidth; canvas.height = st.clientHeight; dark.width = canvas.width; dark.height = canvas.height; }
+// A hidden or not-yet-laid-out stage reports zero size; a zero-width canvas makes
+// the night lighting layer throw and kills the render loop, so never go below 1px
+// and re-sync whenever the stage actually changes size.
+function resize() {
+  const st = $('#stage');
+  const w = Math.max(1, st.clientWidth), h = Math.max(1, st.clientHeight);
+  if (canvas.width === w && canvas.height === h) return;
+  canvas.width = w; canvas.height = h; dark.width = w; dark.height = h;
+}
 window.addEventListener('resize', resize);
+if (window.ResizeObserver) new ResizeObserver(resize).observe($('#stage'));
 const W2S = (wx, wy) => [Math.round((wx - cam.x) * TS + canvas.width / 2), Math.round((wy - cam.y) * TS + canvas.height / 2)];
 const S2W = (sx, sy) => ({ x: (sx - canvas.width / 2) / TS + cam.x, y: (sy - canvas.height / 2) / TS + cam.y });
 function spr(img, wx, wy, w, h, flip) {   // draw sprite with its bottom-centre at world (wx, wy)
@@ -1264,6 +1297,7 @@ function selectionHTML() {
     if (b.type === 'barracks') extra = `Soldiers: ${S.soldiers.filter(s => s.home === b.id).length}/${d.soldiers}`;
     if (b.type === 'hall') extra = `Level ${S.thLevel} · houses ${TH_LEVELS[S.thLevel - 1].cap}<br><b>Townsfolk</b><br>` + (S.villagers.map(v => { const j = bld(v.job); return `${happiness(v) > 66 ? '😊' : happiness(v) > 33 ? '😐' : '😞'} ${v.name} · ${j ? DEFS[j.type].name : 'no job'}`; }).join('<br>') || 'nobody yet');
     if (b.type === 'house') extra = `Houses ${d.cap}`;
+    if (b.type === 'gate') extra = 'Villagers and the Mayor walk straight through. Raiders cannot.';
     return `<div class="t">${d.icon} ${d.name}</div><div class="m">HP ${Math.ceil(b.hp)}/${b.maxhp}</div><div class="m">${extra}</div><div class="m" style="margin-top:6px">${d.desc}</div>`;
   }
   if (selected.kind === 'villager') {
@@ -1294,7 +1328,7 @@ canvas.addEventListener('pointerdown', e => {
   if (!S || S.over) return;
   e.preventDefault(); mouseW = pointerWorld(e); hover = { x: Math.floor(mouseW.x), y: Math.floor(mouseW.y) };
   if (e.button !== 0) return;                                 // right button handled in contextmenu
-  if (buildSel) { tryBuild(buildSel, hover.x, hover.y); if (buildSel === 'wall') painting = true; if (!e.shiftKey && buildSel !== 'wall') selectBuild(null); updateUI(); return; }
+  if (buildSel) { tryBuild(buildSel, hover.x, hover.y); if (buildSel === 'wall' || buildSel === 'gate') painting = true; if (!e.shiftKey && buildSel !== 'wall' && buildSel !== 'gate') selectBuild(null); updateUI(); return; }
   if (demolish) { const b = tileAt(hover.x + 0.5, hover.y + 0.5); if (b) demolishBuilding(b); updateUI(); return; }
   firing = true; fireAt(mouseW.x, mouseW.y);
 });

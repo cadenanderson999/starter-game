@@ -40,6 +40,7 @@ installed to the home screen.
 | 🪵 Lumber Mill | 25 wood, 10 gold | Worker chops wood |
 | ⛏️ Gold Mine | 40 wood | Worker digs gold |
 | 🧱 Wall | 8 wood | Tough. Mobs must chew through it |
+| 🚪 Gate | 15 wood, 10 gold | A wall your own people walk through |
 | 🏹 Archer Tower | 30 wood, 30 gold | Shoots mobs within 5 tiles |
 | ⚔️ Barracks | 60 wood, 60 gold | Trains 3 soldiers (Town Hall lv2) |
 | 🍺 Tavern | 30 wood, 40 gold | Villagers have fun here (Town Hall lv2) |
@@ -70,7 +71,7 @@ tower damage. **If the Town Hall falls, the town is lost.**
 | `WASD` / arrows | Walk the Mayor (camera follows) |
 | Left-click | Shoot — or place the selected building (drag to paint walls) |
 | Right-click | Inspect a building, villager or mob; cancels build mode |
-| `1`–`8` | Pick a building (Shift-click to place several) |
+| `1`–`9` | Pick a building (Shift-click to place several) |
 | `Esc` / right-click | Cancel |
 | `X` | Demolish mode (50 % refund; chops trees for 6 wood) |
 | `R` | Repair everything (1 wood per 10 HP) |
