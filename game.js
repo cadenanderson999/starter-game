@@ -134,7 +134,7 @@ let S = null, grid = null, bmap = null, byType = {}, miniDirty = true;
 let speed = 1, paused = false, buildSel = null, demolish = false, selected = null;
 let hover = { x: -1, y: -1 }, mouseW = { x: 0, y: 0 }, uiTimer = 0, saveTimer = 0, lastFrame = 0;
 const keys = {}; let firing = false, painting = false; const touchVec = { x: 0, y: 0 };
-const cam = { x: COLS / 2, y: ROWS / 2 }; let shakeT = 0, shakeMag = 0;
+const cam = { x: COLS / 2, y: ROWS / 2 }; let shakeT = 0, shakeMag = 0; const rainDrops = [];
 function shake(t, mag) { shakeT = Math.max(shakeT, t); shakeMag = Math.max(shakeMag, mag); }
 
 let chosenDiff = 'normal';
@@ -143,7 +143,7 @@ function newState() {
   S = {
     v: 2, nextId: 1, res: { gold: 50, wood: 80, food: 40 }, day: 1, t: 0, thLevel: 1,
     buildings: [], villagers: [], mobs: [], soldiers: [], projs: [], fx: [], log: [],
-    waveQueue: [], arrivalTimer: 0, kills: 0, over: false, banner: null, foodWarned: false, diff: 'normal', up: { gun: 0, vest: 0, boots: 0 }, drops: [], parts: [], done: [], chopped: 0, questT: 0,
+    waveQueue: [], arrivalTimer: 0, kills: 0, over: false, banner: null, foodWarned: false, weather: 'clear', diff: 'normal', up: { gun: 0, vest: 0, boots: 0 }, drops: [], parts: [], done: [], chopped: 0, questT: 0,
     hero: { x: hx + 1, y: hy + 3, hp: 150, maxhp: 150, cd: 0, dead: 0, cry: 0, cryFx: 0, face: 1, anim: 0, moving: false },
   };
   S.diff = chosenDiff; rebuildGrid();
@@ -325,7 +325,7 @@ function updateVillager(v, dt) {
     }
     case 'working': {
       const b = bld(v.job); if (!b) { v.state = 'idle'; break; }
-      S.res[DEFS[b.type].prod] += DEFS[b.type].rate * productivity(v) * dt;
+      S.res[DEFS[b.type].prod] += DEFS[b.type].rate * productivity(v) * dt * (S.weather === 'rain' && b.type === 'farm' ? RAIN_FARM_BONUS : 1);
       if (v.energy < 15) goHome(v); else if (v.fun < 20 && tavern()) v.state = 'toFun';
       break;
     }
@@ -603,6 +603,13 @@ const EVENTS = [
   { when: () => S.villagers.length < capacity(), run: () => { const v = addVillager(); return `🚶 A wanderer, ${v.name}, asked to stay. Welcome!`; } },
   { when: () => S.res.wood >= 20, run: () => { S.res.wood -= 20; return '🐀 Rats got into the wood store. Lost 20 wood.'; } },
 ];
+const RAIN_FARM_BONUS = 1.35;
+function rollWeather() {
+  const r = Math.random();
+  S.weather = r < 0.22 ? 'rain' : r < 0.32 ? 'fog' : 'clear';
+  if (S.weather === 'rain') { log('🌧️ Rain sets in. The farms drink it up.'); S.banner = { text: '🌧️ Rain', life: 2.5 }; }
+  else if (S.weather === 'fog') { log('🌫️ Fog rolls out of the forest. You cannot see far.'); S.banner = { text: '🌫️ Fog', life: 2.5 }; }
+}
 function dailyEvent() {
   if (S.day < 2 || Math.random() > 0.5) return;
   const ok = EVENTS.filter(e => e.when()); if (!ok.length) return;
@@ -619,6 +626,7 @@ function update(dt) {
     if (S.mobs.length === 0) { const bonus = 10 + 5 * (S.day - 1); S.res.gold += bonus; log(`🏆 Raid repelled! Bounty of 🪙${bonus}.`); }
     S.mobs = []; S.projs = S.projs.filter(p => p.target == null);
     S.banner = { text: `☀️ Day ${S.day}`, life: 3 };
+    rollWeather();
     dailyEvent();
     const cap = capacity();
     if (S.villagers.length > cap) { const n = S.villagers.length - cap; S.villagers.length = cap; log(`${n} villager(s) left — not enough housing.`); }
@@ -668,7 +676,7 @@ function load() {
   try {
     const raw = localStorage.getItem(SAVE_KEY); if (!raw) return false;
     const st = JSON.parse(raw); if (!st || st.v !== 2 || st.over) return false;
-    S = st; roadsFromSave(); S.done = S.done || []; S.chopped = S.chopped || 0; S.questT = 0; S.up = S.up || { gun: 0, vest: 0, boots: 0 }; S.drops = S.drops || []; S.parts = []; S.diff = S.diff || 'normal'; rebuildGrid(); cam.x = S.hero.x; cam.y = S.hero.y; paintGround(); return true;
+    S = st; S.weather = S.weather || 'clear'; roadsFromSave(); S.done = S.done || []; S.chopped = S.chopped || 0; S.questT = 0; S.up = S.up || { gun: 0, vest: 0, boots: 0 }; S.drops = S.drops || []; S.parts = []; S.diff = S.diff || 'normal'; rebuildGrid(); cam.x = S.hero.x; cam.y = S.hero.y; paintGround(); return true;
   } catch (e) { return false; }
 }
 function hasSave() { try { const r = localStorage.getItem(SAVE_KEY); if (!r) return false; const s = JSON.parse(r); return s && s.v === 2 && !s.over; } catch (e) { return false; } }
@@ -1235,6 +1243,26 @@ function draw() {
     }
     ctx.globalCompositeOperation = 'source-over';
   }
+  // weather
+  if (S.weather === 'rain') {
+    if (!rainDrops.length) for (let i = 0; i < 150; i++) rainDrops.push({ x: Math.random(), y: Math.random(), s: rnd(0.7, 1.3) });
+    ctx.fillStyle = 'rgba(40,60,110,.18)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.strokeStyle = 'rgba(180,205,255,.45)'; ctx.lineWidth = 1; ctx.beginPath();
+    const t = now / 1000;
+    for (const d of rainDrops) {
+      const x = ((d.x + t * 0.06 * d.s) % 1) * canvas.width, y = ((d.y + t * 0.85 * d.s) % 1) * canvas.height;
+      ctx.moveTo(x, y); ctx.lineTo(x - 4, y + 13 * d.s);
+    }
+    ctx.stroke();
+  } else if (S.weather === 'fog') {
+    const cx = canvas.width / 2, cy = canvas.height / 2, drift = Math.sin(now / 4000) * 0.04;
+    ctx.fillStyle = `rgba(206,211,219,${0.2 + drift})`; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    const g = ctx.createRadialGradient(cx, cy, Math.min(canvas.width, canvas.height) * 0.1,
+      cx, cy, Math.max(canvas.width, canvas.height) * 0.6);
+    g.addColorStop(0, 'rgba(206,211,219,0)'); g.addColorStop(0.55, `rgba(206,211,219,${0.34 + drift})`);
+    g.addColorStop(1, `rgba(210,215,222,${0.74 + drift})`);
+    ctx.fillStyle = g; ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
   // floating text
   ctx.font = 'bold 13px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   for (const f of S.fx) { const [sx, sy] = W2S(f.x, f.y); ctx.globalAlpha = clamp(f.life / f.max, 0, 1); ctx.fillStyle = '#000'; ctx.fillText(f.text, sx + 1, sy + 1); ctx.fillStyle = f.color; ctx.fillText(f.text, sx, sy); }
@@ -1314,7 +1342,8 @@ function updateUI() {
   $('#r-hp').textContent = `${Math.ceil(S.hero.hp)}/${S.hero.maxhp}`;
   $('#clock').textContent = isNight() ? `🌙 Night ${S.day}  ${Math.ceil(CYCLE - S.t)}s` : `☀️ Day ${S.day}  ${Math.ceil(DAY_LEN - S.t)}s`;
   $('#clock-fill').style.width = `${(S.t / CYCLE) * 100}%`;
-  $('#next').textContent = isNight() ? `${S.mobs.length + S.waveQueue.length} mobs left` : `Tonight: ${waveSummary(S.day)}`;
+  const sky = S.weather === 'rain' ? '🌧️ ' : S.weather === 'fog' ? '🌫️ ' : '';
+  $('#next').textContent = sky + (isNight() ? `${S.mobs.length + S.waveQueue.length} mobs left` : `Tonight: ${waveSummary(S.day)}`);
   for (const btn of document.querySelectorAll('.bb')) {
     const type = btn.dataset.type, d = DEFS[type], locked = (d.th || 1) > S.thLevel;
     btn.disabled = locked; btn.classList.toggle('sel', buildSel === type);
@@ -1338,7 +1367,11 @@ function selectionHTML() {
   if (selected.kind === 'building') {
     const b = bld(selected.id); if (!b) { selected = null; return selectionHTML(); }
     const d = DEFS[b.type]; let extra = '';
-    if (d.prod) { const w = S.villagers.find(v => v.job === b.id); extra = w ? `Worked by ${w.name} (${w.state === 'working' ? 'working' : w.state})` : '<span style="color:var(--red)">No worker yet</span>'; extra += `<br>Makes ${d.rate}/s ${d.prod} at full happiness`; }
+    if (d.prod) { const w = S.villagers.find(v => v.job === b.id);
+      extra = w ? `Worked by ${w.name} (${w.state === 'working' ? 'working' : w.state})` : '<span style="color:var(--red)">No worker yet</span>';
+      extra += `<br>Makes ${d.rate}/s ${d.prod} at full happiness`;
+      if (b.type === 'farm' && S.weather === 'rain') extra += '<br><span style="color:var(--green)">+35% while it rains</span>';
+    }
     if (b.type === 'barracks') extra = `Soldiers: ${S.soldiers.filter(s => s.home === b.id).length}/${d.soldiers}`;
     if (b.type === 'hall') extra = `Level ${S.thLevel} · houses ${TH_LEVELS[S.thLevel - 1].cap}<br><b>Townsfolk</b><br>` + (S.villagers.map(v => { const j = bld(v.job); return `${happiness(v) > 66 ? '😊' : happiness(v) > 33 ? '😐' : '😞'} ${v.name} · ${j ? DEFS[j.type].name : 'no job'}`; }).join('<br>') || 'nobody yet');
     if (b.type === 'house') extra = `Houses ${d.cap}`;

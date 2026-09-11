@@ -33,7 +33,8 @@ installed to the home screen.
 
 The map is a 64×48 tile forest with dirt roads running out of town to the map edge,
 boulders, log piles and bushes scattered through the trees, and a day/night cycle with
-golden-hour light and torches burning after dark.
+golden-hour light and torches burning after dark. Some days bring **rain**, which waters the
+farms for a third more food, or **fog**, which closes in and hides the forest.
 
 **Day (90 s)** — place buildings, chop trees for wood, keep villagers happy.
 
