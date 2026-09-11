@@ -37,12 +37,14 @@ const TH_LEVELS = [
   { cost: { wood: 400, gold: 400 }, hp: 1500, cap: 8 },
 ];
 const MOBS = {
-  goblin: { name: 'Goblin', hp: 30,  spd: 2.4, dmg: 4,  rof: 0.8, gold: 3,  hunts: true },
-  orc:    { name: 'Orc',    hp: 90,  spd: 1.5, dmg: 10, rof: 1.0, gold: 8 },
-  troll:  { name: 'Troll',  hp: 250, spd: 1.1, dmg: 25, rof: 1.5, gold: 20 },
-  shaman: { name: 'Shaman', hp: 40,  spd: 1.6, dmg: 12, rof: 2.0, gold: 10, ranged: 4 },
-  bomber: { name: 'Bomber', hp: 25,  spd: 3.0, dmg: 80, rof: 1.0, gold: 5,  bomb: true },
+  goblin: { name: 'Goblin', hp: 30,  spd: 2.4, dmg: 4,  rof: 0.8, gold: 3,  hunts: true, r: 0.45 },
+  orc:    { name: 'Orc',    hp: 90,  spd: 1.5, dmg: 10, rof: 1.0, gold: 8,  r: 0.5 },
+  troll:  { name: 'Troll',  hp: 250, spd: 1.1, dmg: 25, rof: 1.5, gold: 20, r: 0.65 },
+  shaman: { name: 'Shaman', hp: 40,  spd: 1.6, dmg: 12, rof: 2.0, gold: 10, ranged: 4, r: 0.45 },
+  bomber: { name: 'Bomber', hp: 25,  spd: 3.0, dmg: 80, rof: 1.0, gold: 5,  bomb: true, r: 0.45 },
+  king:   { name: 'Troll King', hp: 900, spd: 1.0, dmg: 45, rof: 1.6, gold: 120, boss: true, r: 0.9 },
 };
+const DASH_CD = 3, DASH_DIST = 3;
 const DIFFS = { easy: 0.7, normal: 1, hard: 1.4 };
 const UPGRADES = {
   gun:   { name: '🔫 Better rifle', desc: '+4 shot damage, faster fire', base: 80, max: 4 },
@@ -86,7 +88,8 @@ let S = null, grid = null, bmap = null;
 let speed = 1, paused = false, buildSel = null, demolish = false, selected = null;
 let hover = { x: -1, y: -1 }, mouseW = { x: 0, y: 0 }, uiTimer = 0, saveTimer = 0, lastFrame = 0;
 const keys = {}; let firing = false, painting = false;
-const cam = { x: COLS / 2, y: ROWS / 2 };
+const cam = { x: COLS / 2, y: ROWS / 2 }; let shakeT = 0, shakeMag = 0;
+function shake(t, mag) { shakeT = Math.max(shakeT, t); shakeMag = Math.max(shakeMag, mag); }
 
 let chosenDiff = 'normal';
 function newState() {
@@ -164,7 +167,7 @@ function removeBuilding(b, reason) {
   if (selected && selected.kind === 'building' && selected.id === b.id) selected = null;
   if (reason === 'destroyed' && !DEFS[b.type].tree) {
     log(`${DEFS[b.type].icon} ${DEFS[b.type].name} was destroyed!`);
-    fx(b.gx + b.w / 2, b.gy + b.h / 2, '💥', '#fff', 1.2); burst(b.gx + b.w / 2, b.gy + b.h / 2, 14, '#c0a080');
+    fx(b.gx + b.w / 2, b.gy + b.h / 2, '💥', '#fff', 1.2); burst(b.gx + b.w / 2, b.gy + b.h / 2, 14, '#c0a080'); shake(0.3, 5); boom();
     if (b.type === 'hall') gameOver();
   }
 }
@@ -263,6 +266,7 @@ function waveFor(n) {
   if (n >= 3) for (let i = 0; i < Math.floor((n - 1) / 2); i++) list.push('shaman');
   if (n >= 3) for (let i = 0; i < Math.floor(n / 2); i++) list.push('bomber');
   list.sort(() => Math.random() - 0.5);
+  if (n % 5 === 0) list.push('king');
   const spread = Math.min(18, 5 + list.length);
   return list.map((type, i) => ({ type, delay: i * (spread / list.length) + rnd(0, 1.5) }));
 }
@@ -272,8 +276,9 @@ function waveSummary(n) {
 }
 function startNight() {
   const n = S.day; S.waveQueue = waveFor(n);
-  S.banner = { text: `🌙 Night ${n} — ${S.waveQueue.length} mobs approach!`, life: 4 };
-  log(`Night ${n} falls. ${S.waveQueue.length} mobs are coming.`); blip(220, 0.3);
+  const boss = S.waveQueue.some(w => w.type === 'king');
+  S.banner = { text: boss ? `👑 Night ${n} — the TROLL KING is coming!` : `🌙 Night ${n} — ${S.waveQueue.length} mobs approach!`, life: 4 };
+  log(`Night ${n} falls. ${S.waveQueue.length} mobs are coming.` + (boss ? ' The Troll King leads them!' : '')); horn();
 }
 function spawnMob(type) {
   const d = MOBS[type], n = S.day, side = Math.floor(rnd(0, 4));
@@ -292,7 +297,7 @@ function pickTarget(m) {
     let d = rectDist(m, b);
     if (MOBS[m.type].bomb && (b.type === 'wall' || b.type === 'tower')) d *= 0.4;
     if (m.type === 'goblin' && (DEFS[b.type].prod || b.type === 'house')) d *= 0.6;
-    if (m.type === 'troll' && (b.type === 'tower' || b.type === 'hall' || b.type === 'barracks')) d *= 0.5;
+    if ((m.type === 'troll' || m.type === 'king') && (b.type === 'tower' || b.type === 'hall' || b.type === 'barracks')) d *= 0.5;
     if (d < bd) { bd = d; best = b; }
   }
   return best;
@@ -304,7 +309,8 @@ function damageMob(m, dmg, byUnit) {
     S.mobs = S.mobs.filter(x => x !== m);
     S.res.gold += MOBS[m.type].gold; S.kills++;
     fx(m.x, m.y, `+🪙${MOBS[m.type].gold}`, '#f2c14e', 1);
-    burst(m.x, m.y, 10, m.type === 'goblin' || m.type === 'bomber' ? '#5aa040' : m.type === 'shaman' ? '#a060c0' : '#7a8a7a');
+    burst(m.x, m.y, MOBS[m.type].boss ? 40 : 10, m.type === 'goblin' || m.type === 'bomber' ? '#5aa040' : m.type === 'shaman' ? '#a060c0' : '#7a8a7a');
+    if (MOBS[m.type].boss) { log('👑 The Troll King has fallen! The forest goes quiet.'); S.banner = { text: '👑 Troll King slain!', life: 4 }; shake(0.6, 8); for (let i = 0; i < 4; i++) S.drops.push({ x: m.x + rnd(-1, 1), y: m.y + rnd(-1, 1), kind: ['gold', 'gold', 'heart', 'wood'][i], life: 40 }); }
     if (Math.random() < 0.25) { const kinds = ['wood', 'food', 'gold', 'heart']; S.drops.push({ x: m.x, y: m.y, kind: kinds[Math.floor(Math.random() * kinds.length)], life: 30 }); }
     if (S.kills % 10 === 0) { const h = S.hero; h.maxhp = heroMaxHp(); h.hp = Math.min(h.maxhp, h.hp + 30); log(`🤠 The Mayor reached level ${heroLevel()}! Shots do ${heroDmg()}.`); }
     if (selected && selected.kind === 'mob' && selected.id === m.id) selected = null;
@@ -350,12 +356,12 @@ function updateMob(m, dt) {
     m.moving = false; return;
   }
   if (atk && def.bomb && atk.type !== 'tree') {                                           // bomber blows up on contact
-    damageBuilding(atk, m.dmg); burst(m.x, m.y, 16, '#ffa030'); fx(m.x, m.y - 0.5, 'BOOM', '#ff8040', 0.8); blip(70, 0.3);
+    damageBuilding(atk, m.dmg); burst(m.x, m.y, 16, '#ffa030'); fx(m.x, m.y - 0.5, 'BOOM', '#ff8040', 0.8); boom(); shake(0.35, 7);
     for (const u of [S.hero, ...S.soldiers]) if (u.hp > 0 && dist(u, m) < 1.5) hitUnit(u, 20);
     S.mobs = S.mobs.filter(x => x !== m); return;
   }
   if (atk) {
-    if (m.cd <= 0) { damageBuilding(atk, atk.type === 'tree' ? m.dmg * 2 : m.dmg); m.cd = m.rof; if (atk.type !== 'tree') fx(m.x, m.y - 0.3, '💢', '#f66', 0.4); }
+    if (m.cd <= 0) { damageBuilding(atk, atk.type === 'tree' ? m.dmg * 2 : m.dmg); m.cd = m.rof; if (atk.type !== 'tree') { fx(m.x, m.y - 0.3, '💢', '#f66', 0.4); if (def.boss || m.type === 'troll') shake(0.25, def.boss ? 6 : 3); } }
     m.moving = false; return;
   }
   const c = center(tgt), dx = c.x - m.x, dy = c.y - m.y, d = Math.hypot(dx, dy) || 1, step = m.spd * dt;
@@ -389,7 +395,7 @@ function updateProj(p, dt) {
   }
   p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt;               // bullet
   if (p.life <= 0 || p.x < 0 || p.y < 0 || p.x > COLS || p.y > ROWS) return false;
-  const m = nearestMob(p, 0.5); if (m) { damageMob(m, p.dmg, S.hero); burst(m.x, m.y - 0.3, 3, '#ffe070'); return false; }
+  const m = S.mobs.find(x => dist(p, x) < MOBS[x.type].r); if (m) { damageMob(m, p.dmg, S.hero); burst(m.x, m.y - 0.3, 3, '#ffe070'); return false; }
   return true;
 }
 function updateBarracks(b, dt) {
@@ -443,7 +449,7 @@ function fireAt(wx, wy) {
   const dx = wx - h.x, dy = wy - h.y, d = Math.hypot(dx, dy) || 1;
   h.face = dx < 0 ? -1 : 1; h.cd = shotCd(); h.flash = 0.06;
   S.projs.push({ x: h.x + dx / d * 0.4, y: h.y - 0.2 + dy / d * 0.4, vx: dx / d * SHOT_SPEED, vy: dy / d * SHOT_SPEED, life: SHOT_RANGE / SHOT_SPEED, dmg: heroDmg() });
-  blip(880, 0.03);
+  noise(0.07, 0.05, 2500);
 }
 function updateHero(dt) {
   const h = S.hero;
@@ -456,9 +462,11 @@ function updateHero(dt) {
   const dx = (keys.d || keys.ArrowRight ? 1 : 0) - (keys.a || keys.ArrowLeft ? 1 : 0);
   const dy = (keys.s || keys.ArrowDown ? 1 : 0) - (keys.w || keys.ArrowUp ? 1 : 0);
   h.moving = !!(dx || dy);
+  h.dash = Math.max(0, (h.dash || 0) - dt);
   if (h.moving) {
     const d = Math.hypot(dx, dy); const step = heroSpeed() * dt;
     stepBlocked(h, dx / d * step, dy / d * step, null); h.anim += dt * 9;
+    if ((keys.Shift) && h.dash <= 0) { h.dash = DASH_CD; for (let i = 0; i < 12; i++) { burst(h.x, h.y + 0.3, 1, '#c8b890'); if (stepBlocked(h, dx / d * DASH_DIST / 12, dy / d * DASH_DIST / 12, null)) break; } blip(500, 0.08); }
   }
   if (firing) fireAt(mouseW.x, mouseW.y);
   if (!isNight() || !nearestMob(h, 6)) h.hp = clamp(h.hp + 2 * dt, 0, h.maxhp);
@@ -506,6 +514,11 @@ function update(dt) {
     S.arrivalTimer += dt;
     if (S.arrivalTimer >= 12) { S.arrivalTimer = 0; const v = addVillager(); log(`🧑‍🌾 ${v.name} moved into Hollowmere.`); }
   }
+  if (S.day === 1 && !isNight()) {
+    const has = t => S.buildings.some(b => b.type === t);
+    const tips = [[6, 'Tip: press 1 and click to build a House so villagers move in', () => !has('house')], [26, 'Tip: build a Farm (2) so nobody goes hungry', () => !has('farm')], [48, 'Tip: build an Archer Tower (6) and some Walls (5) before dark', () => !has('tower')], [70, 'Tip: WASD walks the Mayor, left-click shoots, right-click inspects', () => true]];
+    for (const [at, text, need] of tips) if (S.t >= at && S.t - dt < at && need()) S.banner = { text, life: 4 };
+  }
   if (S.res.food < 1 && !S.foodWarned) { S.foodWarned = true; log('⚠️ The granary is empty! Hungry villagers work slowly. Build more farms.'); S.banner = { text: '⚠️ Out of food — build more farms!', life: 3 }; }
   else if (S.res.food > 15) S.foodWarned = false;
   for (const v of S.villagers) updateVillager(v, dt);
@@ -521,6 +534,8 @@ function update(dt) {
 }
 function gameOver() {
   S.over = true; save();
+  let best = 0; try { best = +localStorage.getItem('hollowmere-best') || 0; if (score() > best) { best = score(); localStorage.setItem('hollowmere-best', best); } } catch (e) { /* ignore */ }
+  $('#go-best').textContent = best ? `Best score: ${best}` : '';
   $('#go-stats').innerHTML = `The town survived <b>${S.day - 1}</b> night${S.day - 1 === 1 ? '' : 's'} and slew <b>${S.kills}</b> mobs.<br>Score: <b>${score()}</b>`;
   $('#gameover').hidden = false;
 }
@@ -540,6 +555,19 @@ function hasSave() { try { const r = localStorage.getItem(SAVE_KEY); if (!r) ret
 // ---------------------------------------------------------------- audio
 let actx = null, muted = false;
 try { muted = !!localStorage.getItem('hollowmere-muted'); } catch (e) { /* ignore */ }
+function noise(len, vol, freq) {
+  if (muted) return;
+  try {
+    if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+    const buf = actx.createBuffer(1, actx.sampleRate * len, actx.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / d.length);
+    const src = actx.createBufferSource(); src.buffer = buf;
+    const f = actx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = freq;
+    const g = actx.createGain(); g.gain.value = vol; src.connect(f); f.connect(g); g.connect(actx.destination); src.start();
+  } catch (e) { /* no audio */ }
+}
+const boom = () => noise(0.5, 0.12, 400);
+const horn = () => { blip(196, 0.5); setTimeout(() => blip(147, 0.8), 350); };
 function blip(freq, len) {
   if (muted) return;
   try {
@@ -691,6 +719,14 @@ function buildSprites() {
     gold: mk(PX, PX, g => { R(g, 5, 5, 6, 6, '#e8c040'); R(g, 6, 4, 4, 1, '#f8e080'); R(g, 6, 11, 4, 1, '#b08a20'); P(g, 7, 6, '#fff8c0'); }),
     heart: mk(PX, PX, g => { R(g, 4, 5, 3, 3, '#e04060'); R(g, 9, 5, 3, 3, '#e04060'); R(g, 4, 7, 8, 2, '#e04060'); R(g, 5, 9, 6, 1, '#e04060'); R(g, 6, 10, 4, 1, '#c02040'); R(g, 7, 11, 2, 1, '#c02040'); P(g, 5, 6, '#ff90a0'); }),
   };
+  SPR.king = [0, 1].map(f => mk(32, 32, g => {
+    R(g, 8, 29, 16, 2, 'rgba(0,0,0,.3)');
+    R(g, 10 + (f ? 2 : 0), 22, 4, 8, '#4a5a4a'); R(g, 18 - (f ? 2 : 0), 22, 4, 8, '#4a5a4a');
+    R(g, 7, 10, 18, 12, '#6a7a6a'); R(g, 7, 10, 18, 1, '#8a9a8a'); R(g, 4, 12, 3, 8, '#6a7a6a'); R(g, 25, 12, 3, 8, '#6a7a6a');
+    R(g, 10, 3, 12, 8, '#7a8a7a'); P(g, 13, 7, '#ff3030'); P(g, 18, 7, '#ff3030'); P(g, 12, 10, '#f8f8f8'); P(g, 19, 10, '#f8f8f8'); R(g, 13, 8, 6, 1, '#4a5a4a');
+    R(g, 10, 1, 12, 2, '#e8c040'); P(g, 10, 0, '#e8c040'); P(g, 13, 0, '#e8c040'); P(g, 16, 0, '#e8c040'); P(g, 19, 0, '#e8c040'); P(g, 21, 0, '#e8c040'); P(g, 15, 1, '#ff3060');
+    R(g, 27, 4, 4, 18, '#5a3a1a'); R(g, 26, 2, 6, 4, '#7a5a3a'); P(g, 28, 3, '#9a7a5a');
+  }));
   SPR.arrow = mk(4, 2, g => { R(g, 0, 0, 4, 1, '#d8c8a0'); P(g, 3, 0, '#e8e8f0'); });
   SPR.bullet = mk(4, 2, g => { R(g, 0, 0, 3, 2, '#ffe070'); P(g, 3, 0, '#fff8d0'); });
 }
@@ -754,6 +790,8 @@ function light(x, y, r, strength) {
 function ringAt(wx, wy, r) { const [sx, sy] = W2S(wx, wy); ctx.strokeStyle = '#f2c14e'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(sx, sy, r, 0, Math.PI * 2); ctx.stroke(); }
 function draw() {
   ctx.imageSmoothingEnabled = false;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  if (shakeT > 0) ctx.translate(Math.round(rnd(-shakeMag, shakeMag)), Math.round(rnd(-shakeMag, shakeMag)));
   const vw = canvas.width / TS, vh = canvas.height / TS;
   const x0 = Math.max(0, Math.floor(cam.x - vw / 2 - 1)), y0 = Math.max(0, Math.floor(cam.y - vh / 2 - 2));
   const x1 = Math.min(COLS, Math.ceil(cam.x + vw / 2 + 1)), y1 = Math.min(ROWS, Math.ceil(cam.y + vh / 2 + 1));
@@ -811,7 +849,7 @@ function draw() {
         if (e.cryFx > 0) { const [sx, sy] = W2S(e.x, e.y); ctx.strokeStyle = `rgba(255,230,120,${e.cryFx / 0.6})`; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(sx, sy, CRY_RANGE * TS * (1 - e.cryFx / 0.6 * 0.6), 0, Math.PI * 2); ctx.stroke(); }
         if (selected && selected.kind === 'hero') ringAt(e.x, e.y, 22);
       } else if (it.kind === 'soldier') { if (e.hp < e.maxhp) hpBar(e.x, e.y + 0.55, 22, e.hp / e.maxhp, '#6fcf7a'); }
-      else { hpBar(e.x, e.y + 0.55, it.kind === 'troll' ? 34 : 22, e.hp / e.maxhp, '#ef6b6b'); if (selected && selected.kind === 'mob' && selected.id === e.id) ringAt(e.x, e.y, 22); }
+      else { hpBar(e.x, e.y + 0.55, it.kind === 'king' ? 60 : it.kind === 'troll' ? 34 : 22, e.hp / e.maxhp, it.kind === 'king' ? '#ffd040' : '#ef6b6b'); if (selected && selected.kind === 'mob' && selected.id === e.id) ringAt(e.x, e.y, 22); }
     }
   }
   // projectiles
@@ -910,13 +948,13 @@ function updateUI() {
 function needBar(label, val) { return `<div class="need"><span>${label}</span><div class="b"><i class="${val < 30 ? 'low' : ''}" style="width:${val}%"></i></div></div>`; }
 function selectionHTML() {
   if (!selected) return '<i>Right-click a building, villager or mob to inspect it.</i>';
-  if (selected.kind === 'hero') { const h = S.hero; return `<div class="t">🤠 The Mayor · level ${heroLevel()}</div><div class="m">HP ${Math.ceil(h.hp)}/${h.maxhp} · shots do ${heroDmg()} · next level in ${10 - S.kills % 10} kills</div><div class="m">War Cry <kbd>Q</kbd>: ${h.cry > 0 ? `ready in ${Math.ceil(h.cry)}s` : '<b style="color:var(--green)">ready</b>'} — ${CRY_DMG} damage to all mobs within ${CRY_RANGE} tiles</div>`; }
+  if (selected.kind === 'hero') { const h = S.hero; return `<div class="t">🤠 The Mayor · level ${heroLevel()}</div><div class="m">HP ${Math.ceil(h.hp)}/${h.maxhp} · shots do ${heroDmg()} · next level in ${10 - S.kills % 10} kills</div><div class="m">War Cry <kbd>Q</kbd>: ${h.cry > 0 ? `ready in ${Math.ceil(h.cry)}s` : '<b style="color:var(--green)">ready</b>'} — ${CRY_DMG} damage to all mobs within ${CRY_RANGE} tiles</div><div class="m">Dash <kbd>Shift</kbd> while walking${h.dash > 0 ? ` (${Math.ceil(h.dash)}s)` : ''}</div>`; }
   if (selected.kind === 'building') {
     const b = bld(selected.id); if (!b) { selected = null; return selectionHTML(); }
     const d = DEFS[b.type]; let extra = '';
     if (d.prod) { const w = S.villagers.find(v => v.job === b.id); extra = w ? `Worked by ${w.name} (${w.state === 'working' ? 'working' : w.state})` : '<span style="color:var(--red)">No worker yet</span>'; extra += `<br>Makes ${d.rate}/s ${d.prod} at full happiness`; }
     if (b.type === 'barracks') extra = `Soldiers: ${S.soldiers.filter(s => s.home === b.id).length}/${d.soldiers}`;
-    if (b.type === 'hall') extra = `Level ${S.thLevel} · houses ${TH_LEVELS[S.thLevel - 1].cap}`;
+    if (b.type === 'hall') extra = `Level ${S.thLevel} · houses ${TH_LEVELS[S.thLevel - 1].cap}<br><b>Townsfolk</b><br>` + (S.villagers.map(v => { const j = bld(v.job); return `${happiness(v) > 66 ? '😊' : happiness(v) > 33 ? '😐' : '😞'} ${v.name} · ${j ? DEFS[j.type].name : 'no job'}`; }).join('<br>') || 'nobody yet');
     if (b.type === 'house') extra = `Houses ${d.cap}`;
     return `<div class="t">${d.icon} ${d.name}</div><div class="m">HP ${Math.ceil(b.hp)}/${b.maxhp}</div><div class="m">${extra}</div><div class="m" style="margin-top:6px">${d.desc}</div>`;
   }
@@ -1009,6 +1047,7 @@ function frame(now) {
     const k = 1 - Math.exp(-6 * raw); const vw = canvas.width / TS, vh = canvas.height / TS;
     if (S.hero.dead <= 0) { cam.x += (S.hero.x - cam.x) * k; cam.y += (S.hero.y - cam.y) * k; }
     cam.x = clamp(cam.x, Math.min(vw / 2, COLS / 2), Math.max(COLS - vw / 2, COLS / 2)); cam.y = clamp(cam.y, Math.min(vh / 2, ROWS / 2), Math.max(ROWS - vh / 2, ROWS / 2));
+    if (shakeT > 0) { shakeT -= raw; if (shakeT <= 0) shakeMag = 0; }
     uiTimer += raw; if (uiTimer > 0.25) { uiTimer = 0; updateUI(); }
     saveTimer += raw; if (saveTimer > 5) { saveTimer = 0; if (!S.over) save(); }
     draw();

@@ -42,7 +42,9 @@ and visit the tavern when bored.
 **Night (50 s)** — goblins, orcs and trolls come out of the forest at the map edges and attack the nearest
 building. Walls in their path get smashed first. Towers shoot, soldiers hunt, and you control the
 **Mayor 🤠**: walk with `WASD`, hold the left mouse button to shoot, and press `Q` for a War Cry that
-blasts every mob nearby. Every 10 kills the Mayor levels up, hitting harder and taking more punishment. Waves grow every night; clear one completely for a gold bounty, and watch the
+blasts every mob nearby. Every 10 kills the Mayor levels up, and gold buys rifle, vest and boots upgrades.
+Shamans lob fire from range, bombers sprint at your walls and explode, and every fifth night the Troll King
+leads the raid. Kills sometimes drop wood, food, gold or hearts for the Mayor to pick up. Waves grow every night; clear one completely for a gold bounty, and watch the
 town log for random daily events — merchants, festivals, rats in the wood store.
 
 Upgrade the Town Hall to unlock the Barracks and Tavern, gain housing, and (at level 3) boost
@@ -60,6 +62,7 @@ tower damage. **If the Town Hall falls, the town is lost.**
 | `X` | Demolish mode (50 % refund; chops trees for 6 wood) |
 | `R` | Repair everything (1 wood per 10 HP) |
 | `Q` | Mayor's War Cry (20 s cooldown) |
+| `Shift` | Dash while walking (3 s cooldown) |
 | `M` | Mute |
 | `Space` | Pause |
 

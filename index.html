@@ -42,7 +42,7 @@
       <button id="up-boots" class="tool"><span class="n">👟 Swift boots</span><small></small></button>
       <div class="hint">
         <b>How to play</b><br>
-        <kbd>WASD</kbd> walk the Mayor around. The camera follows.<br>
+        <kbd>WASD</kbd> walk the Mayor around, <kbd>Shift</kbd> to dash. The camera follows.<br>
         Pick a building and click the map to place it. Hold and drag to paint a line of walls. Chop trees with Demolish for wood.<br><br>
         Villagers arrive when you have housing and go to work on their own. Keep them fed and amused.<br><br>
         At night, mobs raid from the edges of the forest. Walls slow them down, towers shoot them, soldiers fight them, and you <b>left-click to shoot</b>. <kbd>Q</kbd> is your War Cry. <b>Right-click</b> anything to inspect it.<br><br>
@@ -70,8 +70,8 @@
     <h1>🏘️ Hollowmere</h1>
     <p class="tag">Build a town by day. Survive the raids by night.</p>
     <p>You start with a Town Hall, two villagers, and a small pile of wood. Build houses so villagers move in, farms so they eat, mills and mines for materials. Villagers have needs — hunger, energy and fun — and happy villagers work faster.</p>
-    <p>Every night goblins, orcs, trolls, shamans and bombers come out of the forest to wreck your town. Fortify with walls, archer towers and barracks, and lead the fight yourself as the Mayor 🤠 — walk with <kbd>WASD</kbd>, shoot with the mouse.</p>
-    <p class="keys"><kbd>WASD</kbd> move · left-click shoot / place · right-click inspect · <kbd>1</kbd>–<kbd>8</kbd> pick a building · <kbd>Esc</kbd> cancel · <kbd>Space</kbd> pause · <kbd>X</kbd> demolish / chop · <kbd>R</kbd> repair · <kbd>Q</kbd> War Cry · <kbd>M</kbd> mute</p>
+    <p>Every night goblins, orcs, trolls, shamans and bombers come out of the forest — and every fifth night the Troll King himself — to wreck your town. Fortify with walls, archer towers and barracks, and lead the fight yourself as the Mayor 🤠 — walk with <kbd>WASD</kbd>, shoot with the mouse.</p>
+    <p class="keys"><kbd>WASD</kbd> move · left-click shoot / place · right-click inspect · <kbd>1</kbd>–<kbd>8</kbd> pick a building · <kbd>Esc</kbd> cancel · <kbd>Space</kbd> pause · <kbd>X</kbd> demolish / chop · <kbd>R</kbd> repair · <kbd>Q</kbd> War Cry · <kbd>Shift</kbd> dash · <kbd>M</kbd> mute</p>
     <div id="diff" class="row" style="margin-bottom:4px"><span style="color:var(--muted);align-self:center">Difficulty:</span>
       <button data-diff="easy">Easy</button><button data-diff="normal" class="on">Normal</button><button data-diff="hard">Hard</button></div>
     <div class="row">
@@ -86,6 +86,7 @@
   <div class="card">
     <h1>💀 Hollowmere has fallen</h1>
     <p id="go-stats"></p>
+    <p id="go-best" class="tag"></p>
     <div class="row"><button id="btn-again" class="big">🌱 Found a new town</button></div>
   </div>
 </div>
