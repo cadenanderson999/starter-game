@@ -40,7 +40,16 @@ const MOBS = {
   goblin: { name: 'Goblin', hp: 30,  spd: 2.4, dmg: 4,  rof: 0.8, gold: 3,  hunts: true },
   orc:    { name: 'Orc',    hp: 90,  spd: 1.5, dmg: 10, rof: 1.0, gold: 8 },
   troll:  { name: 'Troll',  hp: 250, spd: 1.1, dmg: 25, rof: 1.5, gold: 20 },
+  shaman: { name: 'Shaman', hp: 40,  spd: 1.6, dmg: 12, rof: 2.0, gold: 10, ranged: 4 },
+  bomber: { name: 'Bomber', hp: 25,  spd: 3.0, dmg: 80, rof: 1.0, gold: 5,  bomb: true },
 };
+const DIFFS = { easy: 0.7, normal: 1, hard: 1.4 };
+const UPGRADES = {
+  gun:   { name: '🔫 Better rifle', desc: '+4 shot damage, faster fire', base: 80, max: 4 },
+  vest:  { name: '🛡️ Leather vest', desc: '+40 max HP', base: 80, max: 4 },
+  boots: { name: '👟 Swift boots', desc: '+0.6 walk speed', base: 60, max: 3 },
+};
+const upCost = k => Math.round(UPGRADES[k].base * Math.pow(1.6, S.up[k]));
 const NAMES = ['Ada', 'Bo', 'Cyrus', 'Dara', 'Eli', 'Fenn', 'Gus', 'Hana', 'Ivo', 'Juno', 'Kai', 'Lulu', 'Milo', 'Nia',
   'Otto', 'Pip', 'Quin', 'Rae', 'Sol', 'Tess', 'Uma', 'Vic', 'Wren', 'Xio', 'Yara', 'Zed', 'Ash', 'Bryn', 'Cole', 'Dove'];
 const CRY_CD = 20, CRY_RANGE = 3, CRY_DMG = 35;
@@ -79,15 +88,16 @@ let hover = { x: -1, y: -1 }, mouseW = { x: 0, y: 0 }, uiTimer = 0, saveTimer = 
 const keys = {}; let firing = false, painting = false;
 const cam = { x: COLS / 2, y: ROWS / 2 };
 
+let chosenDiff = 'normal';
 function newState() {
   const hx = Math.floor(COLS / 2) - 1, hy = Math.floor(ROWS / 2) - 1;
   S = {
     v: 2, nextId: 1, res: { gold: 50, wood: 80, food: 40 }, day: 1, t: 0, thLevel: 1,
     buildings: [], villagers: [], mobs: [], soldiers: [], projs: [], fx: [], log: [],
-    waveQueue: [], arrivalTimer: 0, kills: 0, over: false, banner: null, foodWarned: false,
+    waveQueue: [], arrivalTimer: 0, kills: 0, over: false, banner: null, foodWarned: false, diff: 'normal', up: { gun: 0, vest: 0, boots: 0 }, drops: [], parts: [],
     hero: { x: hx + 1, y: hy + 3, hp: 150, maxhp: 150, cd: 0, dead: 0, cry: 0, cryFx: 0, face: 1, anim: 0, moving: false },
   };
-  rebuildGrid();
+  S.diff = chosenDiff; rebuildGrid();
   addBuilding('hall', hx, hy);
   // forest: sparse near town, dense at the edges
   const c = { x: hx + 1, y: hy + 1 };
@@ -115,7 +125,10 @@ const mob = id => (id == null ? null : S.mobs.find(m => m.id === id) || null);
 const capacity = () => S.buildings.reduce((n, b) => n + (b.type === 'hall' ? TH_LEVELS[S.thLevel - 1].cap : DEFS[b.type].cap || 0), 0);
 const isNight = () => S.t >= DAY_LEN;
 const heroLevel = () => 1 + Math.floor(S.kills / 10);
-const heroDmg = () => 12 + 2 * (heroLevel() - 1);
+const heroDmg = () => 12 + 2 * (heroLevel() - 1) + 4 * S.up.gun;
+const heroMaxHp = () => 150 + 10 * (heroLevel() - 1) + 40 * S.up.vest;
+const heroSpeed = () => HERO_SPEED + 0.6 * S.up.boots;
+const shotCd = () => SHOT_CD - 0.03 * S.up.gun;
 function log(msg) { S.log.unshift(msg); if (S.log.length > 40) S.log.pop(); }
 function fx(x, y, text, color, life = 0.9) { S.fx.push({ x, y, text, color, life, max: life }); if (S.fx.length > 80) S.fx.shift(); }
 function toast(msg) { S.banner = { text: msg, life: 1.5 }; }
@@ -151,14 +164,14 @@ function removeBuilding(b, reason) {
   if (selected && selected.kind === 'building' && selected.id === b.id) selected = null;
   if (reason === 'destroyed' && !DEFS[b.type].tree) {
     log(`${DEFS[b.type].icon} ${DEFS[b.type].name} was destroyed!`);
-    fx(b.gx + b.w / 2, b.gy + b.h / 2, '💥', '#fff', 1.2);
+    fx(b.gx + b.w / 2, b.gy + b.h / 2, '💥', '#fff', 1.2); burst(b.gx + b.w / 2, b.gy + b.h / 2, 14, '#c0a080');
     if (b.type === 'hall') gameOver();
   }
 }
 function damageBuilding(b, dmg) { b.hp -= dmg; if (b.hp <= 0) removeBuilding(b, 'destroyed'); }
 function demolishBuilding(b) {
   if (b.type === 'hall') return toast('You cannot demolish the Town Hall');
-  if (b.type === 'tree') { S.res.wood += 6; fx(b.gx + 0.5, b.gy + 0.3, '+🪵6', '#e8c060'); removeBuilding(b, 'chopped'); blip(300, 0.05); return; }
+  if (b.type === 'tree') { S.res.wood += 6; fx(b.gx + 0.5, b.gy + 0.3, '+🪵6', '#e8c060'); burst(b.gx + 0.5, b.gy + 0.5, 8, '#3a8a3a'); removeBuilding(b, 'chopped'); blip(300, 0.05); return; }
   const c = DEFS[b.type].cost; for (const k in c) S.res[k] += Math.floor(c[k] / 2);
   removeBuilding(b, 'demolished'); log(`Demolished a ${DEFS[b.type].name}.`);
 }
@@ -247,6 +260,8 @@ function waveFor(n) {
   for (let i = 0; i < 4 + 2 * n; i++) list.push('goblin');
   if (n >= 2) for (let i = 0; i < Math.floor(n * 1.2) - 1; i++) list.push('orc');
   if (n >= 4) for (let i = 0; i < Math.floor((n - 2) / 2); i++) list.push('troll');
+  if (n >= 3) for (let i = 0; i < Math.floor((n - 1) / 2); i++) list.push('shaman');
+  if (n >= 3) for (let i = 0; i < Math.floor(n / 2); i++) list.push('bomber');
   list.sort(() => Math.random() - 0.5);
   const spread = Math.min(18, 5 + list.length);
   return list.map((type, i) => ({ type, delay: i * (spread / list.length) + rnd(0, 1.5) }));
@@ -265,15 +280,17 @@ function spawnMob(type) {
   let x, y;
   if (side === 0) { x = rnd(0.5, COLS - 0.5); y = 0.5; } else if (side === 1) { x = rnd(0.5, COLS - 0.5); y = ROWS - 0.5; }
   else if (side === 2) { x = 0.5; y = rnd(0.5, ROWS - 0.5); } else { x = COLS - 0.5; y = rnd(0.5, ROWS - 0.5); }
-  const hp = Math.round(d.hp * (1 + 0.1 * (n - 1)));
-  S.mobs.push({ id: S.nextId++, type, x, y, hp, maxhp: hp, dmg: d.dmg * (1 + 0.05 * (n - 1)), spd: d.spd, rof: d.rof,
+  const k = DIFFS[S.diff] || 1, hp = Math.round(d.hp * (1 + 0.1 * (n - 1)) * k);
+  S.mobs.push({ id: S.nextId++, type, x, y, hp, maxhp: hp, dmg: d.dmg * (1 + 0.05 * (n - 1)) * k, spd: d.spd, rof: d.rof,
     cd: rnd(0, d.rof), target: null, blocker: null, attacker: null, retarget: 0, face: 1, anim: 0 });
 }
 function pickTarget(m) {
   let best = null, bd = 1e9;
   for (const b of S.buildings) {
-    if (b.type === 'wall' || b.type === 'tree') continue;
+    if (b.type === 'tree') continue;
+    if (b.type === 'wall' && !MOBS[m.type].bomb) continue;
     let d = rectDist(m, b);
+    if (MOBS[m.type].bomb && (b.type === 'wall' || b.type === 'tower')) d *= 0.4;
     if (m.type === 'goblin' && (DEFS[b.type].prod || b.type === 'house')) d *= 0.6;
     if (m.type === 'troll' && (b.type === 'tower' || b.type === 'hall' || b.type === 'barracks')) d *= 0.5;
     if (d < bd) { bd = d; best = b; }
@@ -287,7 +304,9 @@ function damageMob(m, dmg, byUnit) {
     S.mobs = S.mobs.filter(x => x !== m);
     S.res.gold += MOBS[m.type].gold; S.kills++;
     fx(m.x, m.y, `+🪙${MOBS[m.type].gold}`, '#f2c14e', 1);
-    if (S.kills % 10 === 0) { const h = S.hero; h.maxhp = 150 + 10 * (heroLevel() - 1); h.hp = Math.min(h.maxhp, h.hp + 30); log(`🤠 The Mayor reached level ${heroLevel()}! Shots do ${heroDmg()}.`); }
+    burst(m.x, m.y, 10, m.type === 'goblin' || m.type === 'bomber' ? '#5aa040' : m.type === 'shaman' ? '#a060c0' : '#7a8a7a');
+    if (Math.random() < 0.25) { const kinds = ['wood', 'food', 'gold', 'heart']; S.drops.push({ x: m.x, y: m.y, kind: kinds[Math.floor(Math.random() * kinds.length)], life: 30 }); }
+    if (S.kills % 10 === 0) { const h = S.hero; h.maxhp = heroMaxHp(); h.hp = Math.min(h.maxhp, h.hp + 30); log(`🤠 The Mayor reached level ${heroLevel()}! Shots do ${heroDmg()}.`); }
     if (selected && selected.kind === 'mob' && selected.id === m.id) selected = null;
     blip(160, 0.06);
   }
@@ -325,6 +344,16 @@ function updateMob(m, dt) {
   const tgt = bld(m.target); if (!tgt) return;
   if (m.blocker && !bld(m.blocker)) m.blocker = null;
   const atk = bld(m.blocker) || (rectDist(m, tgt) < 0.7 ? tgt : null);
+  const def = MOBS[m.type];
+  if (def.ranged && rectDist(m, tgt) <= def.ranged && !(atk && atk.type === 'tree')) {   // shaman lobs fire from a distance
+    if (m.cd <= 0) { const c = center(tgt); S.projs.push({ x: m.x, y: m.y - 0.4, tb: tgt.id, tx: c.x, ty: c.y, spd: 7, dmg: m.dmg }); m.cd = m.rof; }
+    m.moving = false; return;
+  }
+  if (atk && def.bomb && atk.type !== 'tree') {                                           // bomber blows up on contact
+    damageBuilding(atk, m.dmg); burst(m.x, m.y, 16, '#ffa030'); fx(m.x, m.y - 0.5, 'BOOM', '#ff8040', 0.8); blip(70, 0.3);
+    for (const u of [S.hero, ...S.soldiers]) if (u.hp > 0 && dist(u, m) < 1.5) hitUnit(u, 20);
+    S.mobs = S.mobs.filter(x => x !== m); return;
+  }
   if (atk) {
     if (m.cd <= 0) { damageBuilding(atk, atk.type === 'tree' ? m.dmg * 2 : m.dmg); m.cd = m.rof; if (atk.type !== 'tree') fx(m.x, m.y - 0.3, '💢', '#f66', 0.4); }
     m.moving = false; return;
@@ -351,12 +380,16 @@ function updateTower(b, dt) {
 function updateProj(p, dt) {
   if (p.target != null) {                                        // homing arrow
     const m = mob(p.target); if (!m) return false;
-    if (moveToward(p, m.x, m.y, p.spd, dt)) { damageMob(m, p.dmg); return false; }
+    if (moveToward(p, m.x, m.y, p.spd, dt)) { damageMob(m, p.dmg); burst(m.x, m.y - 0.3, 3, '#ffe070'); return false; }
+    return true;
+  }
+  if (p.tb != null) {                                            // shaman fireball
+    if (moveToward(p, p.tx, p.ty, p.spd, dt)) { const b = bld(p.tb); if (b) { damageBuilding(b, p.dmg); burst(p.x, p.y, 8, '#ff7030'); } return false; }
     return true;
   }
   p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt;               // bullet
   if (p.life <= 0 || p.x < 0 || p.y < 0 || p.x > COLS || p.y > ROWS) return false;
-  const m = nearestMob(p, 0.5); if (m) { damageMob(m, p.dmg, S.hero); return false; }
+  const m = nearestMob(p, 0.5); if (m) { damageMob(m, p.dmg, S.hero); burst(m.x, m.y - 0.3, 3, '#ffe070'); return false; }
   return true;
 }
 function updateBarracks(b, dt) {
@@ -388,6 +421,16 @@ function updateSoldier(s, dt) {
   }
   s.moving = ox !== s.x || oy !== s.y; if (s.moving) s.anim += dt * 8;
 }
+function burst(x, y, n, color) {
+  for (let i = 0; i < n; i++) { const a = rnd(0, Math.PI * 2), sp = rnd(1, 4); S.parts.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 1.5, life: rnd(0.3, 0.7), color }); }
+  if (S.parts.length > 300) S.parts.splice(0, S.parts.length - 300);
+}
+function buyUpgrade(k) {
+  const u = UPGRADES[k]; if (S.up[k] >= u.max) return toast('Already maxed out');
+  const c = upCost(k); if (S.res.gold < c) return toast(`Needs 🪙${c}`);
+  S.res.gold -= c; S.up[k]++; S.hero.maxhp = heroMaxHp(); if (k === 'vest') S.hero.hp += 40;
+  log(`${u.name} → level ${S.up[k]}.`); blip(700, 0.1);
+}
 function warCry() {
   const h = S.hero; if (h.dead > 0 || h.cry > 0) return;
   h.cry = CRY_CD; h.cryFx = 0.6; let n = 0;
@@ -398,7 +441,7 @@ function warCry() {
 function fireAt(wx, wy) {
   const h = S.hero; if (h.dead > 0 || h.cd > 0 || S.over) return;
   const dx = wx - h.x, dy = wy - h.y, d = Math.hypot(dx, dy) || 1;
-  h.face = dx < 0 ? -1 : 1; h.cd = SHOT_CD;
+  h.face = dx < 0 ? -1 : 1; h.cd = shotCd(); h.flash = 0.06;
   S.projs.push({ x: h.x + dx / d * 0.4, y: h.y - 0.2 + dy / d * 0.4, vx: dx / d * SHOT_SPEED, vy: dy / d * SHOT_SPEED, life: SHOT_RANGE / SHOT_SPEED, dmg: heroDmg() });
   blip(880, 0.03);
 }
@@ -409,16 +452,24 @@ function updateHero(dt) {
     if (h.dead <= 0) { const hall = S.buildings.find(b => b.type === 'hall'); const p = door(hall); h.x = p.x; h.y = p.y; h.hp = h.maxhp; log('🤠 The Mayor is back on their feet.'); }
     return;
   }
-  h.cd -= dt; h.cry = Math.max(0, h.cry - dt); h.cryFx = Math.max(0, h.cryFx - dt);
+  h.cd -= dt; h.cry = Math.max(0, h.cry - dt); h.cryFx = Math.max(0, h.cryFx - dt); h.flash = Math.max(0, (h.flash || 0) - dt);
   const dx = (keys.d || keys.ArrowRight ? 1 : 0) - (keys.a || keys.ArrowLeft ? 1 : 0);
   const dy = (keys.s || keys.ArrowDown ? 1 : 0) - (keys.w || keys.ArrowUp ? 1 : 0);
   h.moving = !!(dx || dy);
   if (h.moving) {
-    const d = Math.hypot(dx, dy); const step = HERO_SPEED * dt;
+    const d = Math.hypot(dx, dy); const step = heroSpeed() * dt;
     stepBlocked(h, dx / d * step, dy / d * step, null); h.anim += dt * 9;
   }
   if (firing) fireAt(mouseW.x, mouseW.y);
   if (!isNight() || !nearestMob(h, 6)) h.hp = clamp(h.hp + 2 * dt, 0, h.maxhp);
+  for (const d of S.drops) if (dist(h, d) < 0.7) {
+    d.life = 0;
+    if (d.kind === 'wood') { S.res.wood += 10; fx(h.x, h.y - 0.8, '+🪵10', '#e8c060'); }
+    else if (d.kind === 'food') { S.res.food += 10; fx(h.x, h.y - 0.8, '+🍞10', '#f0d060'); }
+    else if (d.kind === 'gold') { S.res.gold += 10; fx(h.x, h.y - 0.8, '+🪙10', '#f2c14e'); }
+    else { h.hp = Math.min(h.maxhp, h.hp + 30); fx(h.x, h.y - 0.8, '+30 HP', '#ff6080'); }
+    blip(1200, 0.05);
+  }
 }
 
 // ---------------------------------------------------------------- events, day cycle
@@ -464,6 +515,8 @@ function update(dt) {
   for (const s of S.soldiers.slice()) updateSoldier(s, dt);
   updateHero(dt);
   for (const f of S.fx) { f.life -= dt; f.y -= 0.6 * dt; } S.fx = S.fx.filter(f => f.life > 0);
+  for (const p of S.parts) { p.life -= dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 6 * dt; } S.parts = S.parts.filter(p => p.life > 0);
+  for (const d of S.drops) d.life -= dt; S.drops = S.drops.filter(d => d.life > 0);
   if (S.banner) { S.banner.life -= dt; if (S.banner.life <= 0) S.banner = null; }
 }
 function gameOver() {
@@ -474,12 +527,12 @@ function gameOver() {
 const score = () => S.kills * 10 + (S.day - 1) * 100 + S.buildings.filter(b => !DEFS[b.type].tree).length * 5;
 
 // ---------------------------------------------------------------- save / load
-function save() { try { const st = { ...S, fx: [], mobs: S.mobs.map(m => ({ ...m, attacker: null })) }; localStorage.setItem(SAVE_KEY, JSON.stringify(st)); } catch (e) { /* storage unavailable */ } }
+function save() { try { const st = { ...S, fx: [], parts: [], mobs: S.mobs.map(m => ({ ...m, attacker: null })) }; localStorage.setItem(SAVE_KEY, JSON.stringify(st)); } catch (e) { /* storage unavailable */ } }
 function load() {
   try {
     const raw = localStorage.getItem(SAVE_KEY); if (!raw) return false;
     const st = JSON.parse(raw); if (!st || st.v !== 2 || st.over) return false;
-    S = st; rebuildGrid(); cam.x = S.hero.x; cam.y = S.hero.y; paintGround(); return true;
+    S = st; S.up = S.up || { gun: 0, vest: 0, boots: 0 }; S.drops = S.drops || []; S.parts = []; S.diff = S.diff || 'normal'; rebuildGrid(); cam.x = S.hero.x; cam.y = S.hero.y; paintGround(); return true;
   } catch (e) { return false; }
 }
 function hasSave() { try { const r = localStorage.getItem(SAVE_KEY); if (!r) return false; const s = JSON.parse(r); return s && s.v === 2 && !s.over; } catch (e) { return false; } }
@@ -522,6 +575,8 @@ function figure(g, o) {            // generic 16x16 humanoid; o = {skin, hair, s
   if (o.item === 'hoe') { R(g, 12, 6, 1, 8, '#8a6a48'); R(g, 11, 6, 3, 1, '#9a9aa4'); }
   if (o.item === 'club') { R(g, 12, 3, 2, 8, '#6a4a2a'); R(g, 11, 2, 4, 3, '#7a5a3a'); }
   if (o.item === 'dagger') { R(g, 12, 7, 1, 4, '#d8d8e0'); P(g, 12, 11, '#6a4a2a'); }
+  if (o.item === 'staff') { R(g, 12, 2, 1, 11, '#8a6a48'); P(g, 12, 1, '#c060ff'); P(g, 11, 2, '#e0a0ff'); P(g, 13, 2, '#e0a0ff'); }
+  if (o.item === 'bomb') { R(g, 11, 7, 3, 3, '#1a1a22'); P(g, 12, 6, '#ffa030'); P(g, 13, 5, '#ffe070'); }
 }
 const SPR = {};
 function buildSprites() {
@@ -622,6 +677,20 @@ function buildSprites() {
     R(g, 8, 2, 8, 6, '#8a9a8a'); R(g, 7, 1, 10, 2, '#3a4a3a'); P(g, 10, 5, '#c02020'); P(g, 13, 5, '#c02020'); P(g, 9, 7, '#f8f8f8'); P(g, 14, 7, '#f8f8f8');
     R(g, 19, 4, 3, 12, '#6a4a2a'); R(g, 18, 2, 5, 3, '#7a5a3a');
   }));
+  SPR.shaman = two({ skin: '#5aa040', hair: '#e0e0e0', shirt: '#6a3a9a', pants: '#4a2a6a', item: 'staff' });
+  SPR.bomber = two({ skin: '#5aa040', hair: '#3a7a2a', shirt: '#a03030', pants: '#4a3a2a', item: 'bomb' });
+  SPR.decor = [
+    mk(PX, PX, g => { R(g, 4, 9, 8, 5, '#3f7a34'); R(g, 5, 7, 6, 2, '#3f7a34'); R(g, 3, 10, 1, 3, '#356a2c'); P(g, 6, 8, '#5a9a4a'); P(g, 9, 10, '#5a9a4a'); R(g, 5, 14, 6, 1, 'rgba(0,0,0,.2)'); }),
+    mk(PX, PX, g => { R(g, 5, 9, 6, 4, '#8a8a94'); R(g, 6, 8, 4, 1, '#a0a0aa'); P(g, 6, 9, '#b0b0ba'); R(g, 5, 13, 6, 1, '#5e5e68'); R(g, 4, 14, 8, 1, 'rgba(0,0,0,.2)'); }),
+    mk(PX, PX, g => { P(g, 3, 4, '#f0d060'); P(g, 4, 3, '#f8f8f8'); P(g, 11, 7, '#f06090'); P(g, 12, 6, '#f8f8f8'); P(g, 7, 12, '#f8f8f8'); P(g, 6, 11, '#f0d060'); P(g, 3, 5, '#3a7a2a'); P(g, 11, 8, '#3a7a2a'); P(g, 7, 13, '#3a7a2a'); }),
+    mk(PX, PX, g => { R(g, 5, 8, 6, 5, '#7a5a3a'); R(g, 5, 7, 6, 1, '#a37a52'); P(g, 7, 7, '#c49a6a'); R(g, 4, 13, 8, 1, 'rgba(0,0,0,.2)'); }),
+  ];
+  SPR.drop = {
+    wood: mk(PX, PX, g => { R(g, 3, 7, 10, 4, '#a37a52'); R(g, 3, 7, 2, 4, '#d9b98a'); R(g, 3, 8, 10, 1, '#8a6a48'); }),
+    food: mk(PX, PX, g => { R(g, 4, 6, 8, 5, '#d9a050'); R(g, 5, 5, 6, 1, '#e8b860'); P(g, 6, 7, '#f0d090'); P(g, 9, 8, '#f0d090'); }),
+    gold: mk(PX, PX, g => { R(g, 5, 5, 6, 6, '#e8c040'); R(g, 6, 4, 4, 1, '#f8e080'); R(g, 6, 11, 4, 1, '#b08a20'); P(g, 7, 6, '#fff8c0'); }),
+    heart: mk(PX, PX, g => { R(g, 4, 5, 3, 3, '#e04060'); R(g, 9, 5, 3, 3, '#e04060'); R(g, 4, 7, 8, 2, '#e04060'); R(g, 5, 9, 6, 1, '#e04060'); R(g, 6, 10, 4, 1, '#c02040'); R(g, 7, 11, 2, 1, '#c02040'); P(g, 5, 6, '#ff90a0'); }),
+  };
   SPR.arrow = mk(4, 2, g => { R(g, 0, 0, 4, 1, '#d8c8a0'); P(g, 3, 0, '#e8e8f0'); });
   SPR.bullet = mk(4, 2, g => { R(g, 0, 0, 3, 2, '#ffe070'); P(g, 3, 0, '#fff8d0'); });
 }
@@ -636,6 +705,8 @@ function paintGround() {
     const dirt = d < 5.5 + Math.sin(x * 1.7) * 0.8 + Math.cos(y * 2.1) * 0.8;
     const v = (x * 7 + y * 13 + (x * y) % 5) % 4;
     gctx.drawImage(dirt ? SPR.dirt[v % 3] : SPR.grass[v], x * PX, y * PX);
+    const hsh = (((x * 73856093) ^ (y * 19349663)) >>> 0) % 1000;
+    if (!dirt && hsh < 70 && !grid[y][x]) gctx.drawImage(SPR.decor[hsh % 4], x * PX, y * PX);
   }
   for (const b of S.buildings) if (!DEFS[b.type].tree) paintDirt(b);
 }
@@ -699,7 +770,8 @@ function draw() {
       if (buildSel) {
         const d = DEFS[buildSel], ok = canPlace(buildSel, hover.x, hover.y) && canAfford(d.cost) && (d.th || 1) <= S.thLevel;
         const [sx, sy] = W2S(hover.x, hover.y);
-        ctx.fillStyle = ok ? 'rgba(110,220,120,.4)' : 'rgba(240,90,90,.4)'; ctx.fillRect(sx, sy, d.w * TS, d.h * TS);
+        ctx.fillStyle = ok ? 'rgba(110,220,120,.35)' : 'rgba(240,90,90,.35)'; ctx.fillRect(sx, sy, d.w * TS, d.h * TS);
+        ctx.globalAlpha = 0.7; const gi = SPR[buildSel]; ctx.drawImage(gi, sx + (d.w * TS - gi.width * SCALE) / 2, sy + d.h * TS - gi.height * SCALE, gi.width * SCALE, gi.height * SCALE); ctx.globalAlpha = 1;
         if (buildSel === 'tower') { ctx.strokeStyle = 'rgba(120,160,255,.4)'; ctx.beginPath(); ctx.arc(sx + TS / 2, sy + TS / 2, DEFS.tower.range * TS, 0, Math.PI * 2); ctx.stroke(); }
       } else { const b = tileAt(hover.x + 0.5, hover.y + 0.5); if (b) { const [sx, sy] = W2S(b.gx, b.gy); ctx.fillStyle = 'rgba(240,90,90,.4)'; ctx.fillRect(sx, sy, b.w * TS, b.h * TS); } }
     }
@@ -708,6 +780,8 @@ function draw() {
   if (S.mobs.length) for (const b of S.buildings) if (b.type === 'tower' && b.gx >= x0 - 5 && b.gx <= x1 + 5 && b.gy >= y0 - 5 && b.gy <= y1 + 5) {
     const c = center(b); const [sx, sy] = W2S(c.x, c.y); ctx.strokeStyle = 'rgba(120,160,255,.15)'; ctx.beginPath(); ctx.arc(sx, sy, DEFS.tower.range * TS, 0, Math.PI * 2); ctx.stroke();
   }
+  // drops on the ground
+  for (const d of S.drops) { const bob = Math.sin(performance.now() / 200 + d.x) * 3; const [sx, sy] = W2S(d.x, d.y); if (d.life < 5 && Math.floor(d.life * 6) % 2) continue; ctx.drawImage(SPR.drop[d.kind], sx - 24, sy - 30 + bob, 48, 48); }
   // depth-sorted world objects
   const items = [];
   for (const b of S.buildings) if (b.gx + b.w > x0 && b.gx < x1 && b.gy + b.h > y0 - 1 && b.gy < y1) items.push({ y: b.gy + b.h, b });
@@ -733,6 +807,7 @@ function draw() {
         if (selected && selected.kind === 'villager' && selected.id === e.id) ringAt(e.x, e.y, 20);
       } else if (it.kind === 'hero') {
         hpBar(e.x, e.y + 0.55, 28, e.hp / e.maxhp, '#f2c14e');
+        if (e.flash > 0) { const [sx, sy] = W2S(e.x, e.y); const fxx = sx + e.face * 24, fyy = sy - 4; ctx.fillStyle = '#fff4a0'; ctx.fillRect(fxx - 4, fyy - 4, 8, 8); ctx.fillStyle = '#ffb040'; ctx.fillRect(fxx - 7, fyy - 1, 14, 2); ctx.fillRect(fxx - 1, fyy - 7, 2, 14); }
         if (e.cryFx > 0) { const [sx, sy] = W2S(e.x, e.y); ctx.strokeStyle = `rgba(255,230,120,${e.cryFx / 0.6})`; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(sx, sy, CRY_RANGE * TS * (1 - e.cryFx / 0.6 * 0.6), 0, Math.PI * 2); ctx.stroke(); }
         if (selected && selected.kind === 'hero') ringAt(e.x, e.y, 22);
       } else if (it.kind === 'soldier') { if (e.hp < e.maxhp) hpBar(e.x, e.y + 0.55, 22, e.hp / e.maxhp, '#6fcf7a'); }
@@ -742,9 +817,13 @@ function draw() {
   // projectiles
   for (const p of S.projs) {
     const [sx, sy] = W2S(p.x, p.y); let ang;
-    if (p.target != null) { const m = mob(p.target); if (!m) continue; ang = Math.atan2(m.y - p.y, m.x - p.x); } else ang = Math.atan2(p.vy, p.vx);
+    if (p.target != null) { const m = mob(p.target); if (!m) continue; ang = Math.atan2(m.y - p.y, m.x - p.x); } else if (p.tb == null) ang = Math.atan2(p.vy, p.vx);
+    if (p.tb != null) { ctx.fillStyle = '#ff7030'; ctx.beginPath(); ctx.arc(sx, sy, 5, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#ffe070'; ctx.fillRect(sx - 2, sy - 2, 4, 4); continue; }
     ctx.save(); ctx.translate(sx, sy); ctx.rotate(ang); ctx.drawImage(p.target != null ? SPR.arrow : SPR.bullet, -6, -3, 12, 6); ctx.restore();
   }
+  // particles
+  for (const p of S.parts) { const [sx, sy] = W2S(p.x, p.y); ctx.globalAlpha = clamp(p.life * 2, 0, 1); ctx.fillStyle = p.color; ctx.fillRect(sx - 2, sy - 2, 4, 4); }
+  ctx.globalAlpha = 1;
   // night: darkness layer with light holes
   const dk = darkness();
   if (dk > 0) {
@@ -824,6 +903,7 @@ function updateUI() {
   $('#btn-upgrade').disabled = !next; $('#upgrade-cost').textContent = next ? `lv${S.thLevel + 1}: ${costStr(next.cost)}` : 'max level';
   const rc = repairCost(); $('#btn-repair').disabled = !rc; $('#repair-cost').textContent = rc ? `🪵${rc}` : 'nothing damaged';
   $('#btn-demolish').classList.toggle('on', demolish);
+  for (const k in UPGRADES) { const u = UPGRADES[k], btn = $('#up-' + k); const maxed = S.up[k] >= u.max; btn.disabled = maxed || S.res.gold < upCost(k); btn.querySelector('.n').textContent = `${u.name} ${'★'.repeat(S.up[k])}`; btn.querySelector('small').textContent = maxed ? 'max level' : `${u.desc} · 🪙${upCost(k)}`; }
   $('#log').innerHTML = S.log.slice(0, 12).map(m => `<div>${m}</div>`).join('');
   $('#sel').innerHTML = selectionHTML();
 }
@@ -850,7 +930,8 @@ function selectionHTML() {
   }
   if (selected.kind === 'mob') {
     const m = mob(selected.id); if (!m) { selected = null; return selectionHTML(); }
-    return `<div class="t">${MOBS[m.type].name}</div><div class="m">HP ${Math.ceil(m.hp)}/${m.maxhp} · hits for ${Math.round(m.dmg)}</div>`;
+    const tip = { goblin: 'Fast and weak. Goes for farms and houses, and chases whoever shoots it.', orc: 'Tough bruiser. Smashes whatever is closest.', troll: 'Huge. Heads straight for towers and the Town Hall.', shaman: 'Lobs fire at buildings from 4 tiles away. Kill it first.', bomber: 'Sprints at walls and towers and explodes. Shoot it before it arrives.' }[m.type];
+    return `<div class="t">${MOBS[m.type].name}</div><div class="m">HP ${Math.ceil(m.hp)}/${m.maxhp} · hits for ${Math.round(m.dmg)}</div><div class="m" style="margin-top:6px">${tip}</div>`;
   }
   return '';
 }
@@ -905,6 +986,8 @@ function setSpeed(s) {
 }
 for (const b of document.querySelectorAll('#speed button')) b.onclick = () => setSpeed(+b.dataset.speed);
 $('#btn-upgrade').onclick = () => { upgradeHall(); updateUI(); };
+for (const k in UPGRADES) $('#up-' + k).onclick = () => { buyUpgrade(k); updateUI(); };
+for (const b of document.querySelectorAll('#diff button')) b.onclick = () => { chosenDiff = b.dataset.diff; for (const o of document.querySelectorAll('#diff button')) o.classList.toggle('on', o === b); };
 $('#btn-repair').onclick = () => { repairAll(); updateUI(); };
 $('#btn-demolish').onclick = () => { demolish = !demolish; buildSel = null; updateUI(); };
 $('#btn-new').onclick = () => { if (confirm('Abandon this town and start over?')) { localStorage.removeItem(SAVE_KEY); startGame(true); } };
