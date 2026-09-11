@@ -497,7 +497,7 @@ function warCry() {
 function fireAt(wx, wy) {
   const h = S.hero; if (h.dead > 0 || h.cd > 0 || S.over) return;
   const dx = wx - h.x, dy = wy - h.y, d = Math.hypot(dx, dy) || 1;
-  h.face = dx < 0 ? -1 : 1; h.cd = shotCd(); h.flash = 0.06;
+  h.face = dx < 0 ? -1 : 1; h.cd = shotCd(); h.muzzle = 0.06;
   S.projs.push({ x: h.x + dx / d * 0.4, y: h.y - 0.2 + dy / d * 0.4, vx: dx / d * SHOT_SPEED, vy: dy / d * SHOT_SPEED, life: SHOT_RANGE / SHOT_SPEED, dmg: heroDmg() });
   noise(0.07, 0.05, 2500);
 }
@@ -512,7 +512,7 @@ function updateHero(dt) {
     }
     return;
   }
-  h.cd -= dt; h.cry = Math.max(0, h.cry - dt); h.cryFx = Math.max(0, h.cryFx - dt); h.flash = Math.max(0, (h.flash || 0) - dt);
+  h.cd -= dt; h.cry = Math.max(0, h.cry - dt); h.cryFx = Math.max(0, h.cryFx - dt); h.muzzle = Math.max(0, (h.muzzle || 0) - dt);
   let dx = (keys.d || keys.ArrowRight ? 1 : 0) - (keys.a || keys.ArrowLeft ? 1 : 0);
   let dy = (keys.s || keys.ArrowDown ? 1 : 0) - (keys.w || keys.ArrowUp ? 1 : 0);
   if (!dx && !dy && (Math.abs(touchVec.x) > 0.2 || Math.abs(touchVec.y) > 0.2)) { dx = touchVec.x; dy = touchVec.y; }
@@ -599,7 +599,11 @@ function gameOver() {
 const score = () => S.kills * 10 + (S.day - 1) * 100 + S.buildings.filter(b => !DEFS[b.type].tree).length * 5;
 
 // ---------------------------------------------------------------- save / load
-function save() { try { const st = { ...S, fx: [], parts: [], mobs: S.mobs.map(m => ({ ...m, attacker: null })) }; localStorage.setItem(SAVE_KEY, JSON.stringify(st)); } catch (e) { /* storage unavailable */ } }
+function save() { try {
+    const clean = o => { const c = { ...o }; delete c.flash; delete c.flash2; return c; };
+    const st = { ...S, fx: [], parts: [], hero: clean(S.hero), buildings: S.buildings.map(clean),
+      soldiers: S.soldiers.map(clean), villagers: S.villagers.map(clean),
+      mobs: S.mobs.map(m => ({ ...clean(m), attacker: null })) }; localStorage.setItem(SAVE_KEY, JSON.stringify(st)); } catch (e) { /* storage unavailable */ } }
 function load() {
   try {
     const raw = localStorage.getItem(SAVE_KEY); if (!raw) return false;
@@ -1056,7 +1060,7 @@ function draw() {
         const d = DEFS[buildSel], ok = canPlace(buildSel, hover.x, hover.y) && canAfford(d.cost) && (d.th || 1) <= S.thLevel;
         const [sx, sy] = W2S(hover.x, hover.y);
         ctx.fillStyle = ok ? 'rgba(110,220,120,.35)' : 'rgba(240,90,90,.35)'; ctx.fillRect(sx, sy, d.w * TS, d.h * TS);
-        ctx.globalAlpha = 0.7; const gi = SPR[buildSel]; ctx.drawImage(gi, sx + (d.w * TS - gi.width * SCALE) / 2, sy + d.h * TS - gi.height * SCALE, gi.width * SCALE, gi.height * SCALE); ctx.globalAlpha = 1;
+        ctx.globalAlpha = 0.7; const gsp = SPR[buildSel], gi = Array.isArray(gsp) ? gsp[0] : gsp; ctx.drawImage(gi, sx + (d.w * TS - gi.width * SCALE) / 2, sy + d.h * TS - gi.height * SCALE, gi.width * SCALE, gi.height * SCALE); ctx.globalAlpha = 1;
         if (buildSel === 'tower') { ctx.strokeStyle = 'rgba(120,160,255,.4)'; ctx.beginPath(); ctx.arc(sx + TS / 2, sy + TS / 2, DEFS.tower.range * TS, 0, Math.PI * 2); ctx.stroke(); }
       } else { const b = tileAt(hover.x + 0.5, hover.y + 0.5); if (b) { const [sx, sy] = W2S(b.gx, b.gy); ctx.fillStyle = 'rgba(240,90,90,.4)'; ctx.fillRect(sx, sy, b.w * TS, b.h * TS); } }
     }
@@ -1107,7 +1111,7 @@ function draw() {
         if (selected && selected.kind === 'villager' && selected.id === e.id) ringAt(e.x, e.y, 20);
       } else if (it.kind === 'hero') {
         hpBar(e.x, e.y + 0.55, 28, e.hp / e.maxhp, '#f2c14e');
-        if (e.flash > 0) { const [sx, sy] = W2S(e.x, e.y); const fxx = sx + e.face * 24, fyy = sy - 4; ctx.fillStyle = '#fff4a0'; ctx.fillRect(fxx - 4, fyy - 4, 8, 8); ctx.fillStyle = '#ffb040'; ctx.fillRect(fxx - 7, fyy - 1, 14, 2); ctx.fillRect(fxx - 1, fyy - 7, 2, 14); }
+        if (e.muzzle > 0) { const [sx, sy] = W2S(e.x, e.y); const fxx = sx + e.face * 24, fyy = sy - 4; ctx.fillStyle = '#fff4a0'; ctx.fillRect(fxx - 4, fyy - 4, 8, 8); ctx.fillStyle = '#ffb040'; ctx.fillRect(fxx - 7, fyy - 1, 14, 2); ctx.fillRect(fxx - 1, fyy - 7, 2, 14); }
         if (e.cryFx > 0) { const [sx, sy] = W2S(e.x, e.y); ctx.strokeStyle = `rgba(255,230,120,${e.cryFx / 0.6})`; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(sx, sy, CRY_RANGE * TS * (1 - e.cryFx / 0.6 * 0.6), 0, Math.PI * 2); ctx.stroke(); }
         if (selected && selected.kind === 'hero') ringAt(e.x, e.y, 22);
       } else if (it.kind === 'soldier') { if (e.hp < e.maxhp) hpBar(e.x, e.y + 0.55, 22, e.hp / e.maxhp, '#6fcf7a'); }
