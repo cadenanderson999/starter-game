@@ -52,7 +52,7 @@ const UPGRADES = {
   boots: { name: '👟 Swift boots', desc: '+0.6 walk speed', base: 60, max: 3 },
 };
 const upCost = k => Math.round(UPGRADES[k].base * Math.pow(1.6, S.up[k]));
-const count = t => S.buildings.filter(b => b.type === t).length;
+const count = t => ofType(t).length;
 const QUESTS = [
   { id: 'house1',  text: 'Build a House',                    reward: { wood: 20 },  check: () => count('house') >= 1 },
   { id: 'farm1',   text: 'Build a Farm',                     reward: { wood: 20 },  check: () => count('farm') >= 1 },
@@ -65,7 +65,7 @@ const QUESTS = [
   { id: 'th2',     text: 'Upgrade the Town Hall to level 2', reward: { gold: 60 },  check: () => S.thLevel >= 2 },
   { id: 'barracks',text: 'Build a Barracks',                 reward: { food: 30 },  check: () => count('barracks') >= 1 },
   { id: 'tavern',  text: 'Open a Tavern',                    reward: { gold: 40 },  check: () => count('tavern') >= 1 },
-  { id: 'night5',  text: 'Defeat the Troll King (night 5)',  reward: { gold: 150 }, check: () => S.day >= 6 },
+  { id: 'night5',  text: 'Slay the Troll King',              reward: { gold: 150 }, check: () => (S.kings || 0) >= 1 },
   { id: 'kills100',text: 'Slay 100 mobs',                    reward: { gold: 100 }, check: () => S.kills >= 100 },
   { id: 'pop15',   text: 'Grow to 15 villagers',             reward: { gold: 80 },  check: () => S.villagers.length >= 15 },
   { id: 'th3',     text: 'Upgrade the Town Hall to level 3', reward: { gold: 200 }, check: () => S.thLevel >= 3 },
@@ -76,7 +76,7 @@ function checkQuests() {
   for (const q of QUESTS) {
     if (S.done.includes(q.id) || !q.check()) continue;
     S.done.push(q.id); for (const k in q.reward) S.res[k] += q.reward[k];
-    const msg = `✅ Quest done: ${q.text} — ${costStr(q.reward) || `🍞${q.reward.food}`}`;
+    const msg = `✅ Quest done: ${q.text} — ${costStr(q.reward)}`;
     log(msg); S.banner = { text: msg, life: 3.5 }; blip(900, 0.15); setTimeout(() => blip(1200, 0.2), 120);
   }
 }
@@ -113,7 +113,7 @@ function costStr(cost) {
 const tileAt = (x, y) => (x < 0 || y < 0 || x >= COLS || y >= ROWS) ? null : grid[Math.floor(y)][Math.floor(x)];
 
 // ---------------------------------------------------------------- state
-let S = null, grid = null, bmap = null;
+let S = null, grid = null, bmap = null, byType = {}, miniDirty = true;
 let speed = 1, paused = false, buildSel = null, demolish = false, selected = null;
 let hover = { x: -1, y: -1 }, mouseW = { x: 0, y: 0 }, uiTimer = 0, saveTimer = 0, lastFrame = 0;
 const keys = {}; let firing = false, painting = false; const touchVec = { x: 0, y: 0 };
@@ -144,17 +144,21 @@ function newState() {
   log('Welcome to Hollowmere. Build houses and a farm before nightfall!');
   paintGround();
 }
+function stamp(b) {
+  bmap.set(b.id, b); (byType[b.type] || (byType[b.type] = [])).push(b);
+  for (let y = b.gy; y < b.gy + b.h; y++) for (let x = b.gx; x < b.gx + b.w; x++) grid[y][x] = b;
+}
 function rebuildGrid() {
   grid = Array.from({ length: ROWS }, () => Array(COLS).fill(null));
-  bmap = new Map();
-  for (const b of S.buildings) {
-    bmap.set(b.id, b);
-    for (let y = b.gy; y < b.gy + b.h; y++) for (let x = b.gx; x < b.gx + b.w; x++) grid[y][x] = b;
-  }
+  bmap = new Map(); byType = {}; miniDirty = true;
+  for (const b of S.buildings) stamp(b);
 }
+const ofType = t => byType[t] || [];
+const hall = () => ofType('hall')[0] || null;
+const PROD_TYPES = ['farm', 'mill', 'mine'];
 const bld = id => (id == null ? null : bmap.get(id) || null);
 const mob = id => (id == null ? null : S.mobs.find(m => m.id === id) || null);
-const capacity = () => S.buildings.reduce((n, b) => n + (b.type === 'hall' ? TH_LEVELS[S.thLevel - 1].cap : DEFS[b.type].cap || 0), 0);
+const capacity = () => (hall() ? TH_LEVELS[S.thLevel - 1].cap : 0) + ofType('house').length * DEFS.house.cap;
 const isNight = () => S.t >= DAY_LEN;
 const heroLevel = () => 1 + Math.floor(S.kills / 10);
 const heroDmg = () => 12 + 2 * (heroLevel() - 1) + 4 * S.up.gun;
@@ -179,7 +183,7 @@ function addBuilding(type, gx, gy) {
   const d = DEFS[type];
   const b = { id: S.nextId++, type, gx, gy, w: d.w, h: d.h, hp: d.hp, maxhp: d.hp, cd: 0, trainCd: 0, v: Math.floor(rnd(0, 3)) };
   if (type === 'hall') b.maxhp = b.hp = TH_LEVELS[S.thLevel - 1].hp;
-  S.buildings.push(b); rebuildGrid(); return b;
+  S.buildings.push(b); stamp(b); miniDirty = true; return b;
 }
 function tryBuild(type, gx, gy) {
   const d = DEFS[type];
@@ -217,31 +221,33 @@ function upgradeHall() {
   const next = TH_LEVELS[S.thLevel]; if (!next) return toast('Town Hall is at max level');
   if (!canAfford(next.cost)) return toast('Not enough resources for the upgrade');
   pay(next.cost); S.thLevel++;
-  const hall = S.buildings.find(b => b.type === 'hall'); hall.maxhp = next.hp; hall.hp = next.hp;
+  const th = hall(); th.maxhp = next.hp; th.hp = next.hp;
   log(`🏛️ Town Hall upgraded to level ${S.thLevel}!` + (S.thLevel === 2 ? ' Barracks and Tavern unlocked.' : ''));
   blip(660, 0.12);
 }
 
 // ---------------------------------------------------------------- villagers
 function addVillager() {
-  const hall = S.buildings.find(b => b.type === 'hall'); const p = door(hall);
+  const p = door(hall());
   const v = { id: S.nextId++, name: NAMES[Math.floor(Math.random() * NAMES.length)], x: p.x + rnd(-0.5, 0.5), y: p.y,
     state: 'idle', job: null, home: null, hunger: rnd(10, 40), energy: rnd(70, 100), fun: rnd(40, 80), wt: 0, tx: null, ty: null, face: 1, anim: rnd(0, 1) };
   S.villagers.push(v); return v;
 }
 const happiness = v => ((100 - v.hunger) + v.energy + v.fun) / 3;
 const productivity = v => 0.5 + happiness(v) / 200;
-function nearestBuilding(p, pred) {
+function nearestOf(p, list, pred) {
   let best = null, bd = 1e9;
-  for (const b of S.buildings) if (pred(b)) { const d = rectDist(p, b); if (d < bd) { bd = d; best = b; } }
+  for (const b of list) if (!pred || pred(b)) { const d = rectDist(p, b); if (d < bd) { bd = d; best = b; } }
   return best;
 }
 function findJob(v) {
-  const taken = new Set(S.villagers.filter(o => o !== v && o.job != null).map(o => o.job));
-  return nearestBuilding(v, b => DEFS[b.type].prod && !taken.has(b.id));
+  const taken = new Set(); for (const o of S.villagers) if (o !== v && o.job != null) taken.add(o.job);
+  let best = null, bd = 1e9;
+  for (const t of PROD_TYPES) { const b = nearestOf(v, ofType(t), b => !taken.has(b.id)); if (b) { const d = rectDist(v, b); if (d < bd) { bd = d; best = b; } } }
+  return best;
 }
 function goHome(v) {
-  const h = nearestBuilding(v, b => b.type === 'house' || b.type === 'hall');
+  const h = nearestOf(v, ofType('house')) || hall();
   v.home = h ? h.id : null; v.state = 'toHome';
 }
 function updateVillager(v, dt) {
@@ -251,17 +257,17 @@ function updateVillager(v, dt) {
   if (v.state !== 'sleeping') v.energy = clamp(v.energy - 0.45 * dt, 0, 100);
   if (v.hunger >= 60 && S.res.food >= 5) { S.res.food -= 5; v.hunger = clamp(v.hunger - 70, 0, 100); }
   if (night && v.state !== 'sleeping' && v.state !== 'toHome') goHome(v);
-  const tavern = () => nearestBuilding(v, b => b.type === 'tavern');
+  const tavern = () => nearestOf(v, ofType('tavern'));
   const ox = v.x, oy = v.y;
   switch (v.state) {
     case 'idle': {
       if (v.energy < 15) { goHome(v); break; }
       if (v.fun < 25 && tavern()) { v.state = 'toFun'; break; }
-      if (v.job == null || !bld(v.job)) { const j = findJob(v); v.job = j ? j.id : null; }
+      if (v.job == null || !bld(v.job)) { v.jt = (v.jt || 0) - dt; if (v.jt <= 0) { v.jt = 1.5; const j = findJob(v); v.job = j ? j.id : null; } }
       if (v.job != null) { v.state = 'toWork'; break; }
       v.wt -= dt;
       if (v.tx == null || v.wt <= 0) {
-        const hall = S.buildings.find(b => b.type === 'hall'); const p = door(hall);
+        const p = door(hall());
         v.tx = clamp(p.x + rnd(-3, 3), 0.3, COLS - 0.3); v.ty = clamp(p.y + rnd(-1, 3), 0.3, ROWS - 0.3); v.wt = rnd(2, 5);
       }
       if (moveToward(v, v.tx, v.ty, 1.2, dt)) v.tx = null;
@@ -339,7 +345,7 @@ function damageMob(m, dmg, byUnit) {
     S.res.gold += MOBS[m.type].gold; S.kills++;
     fx(m.x, m.y, `+🪙${MOBS[m.type].gold}`, '#f2c14e', 1);
     burst(m.x, m.y, MOBS[m.type].boss ? 40 : 10, m.type === 'goblin' || m.type === 'bomber' ? '#5aa040' : m.type === 'shaman' ? '#a060c0' : '#7a8a7a');
-    if (MOBS[m.type].boss) { log('👑 The Troll King has fallen! The forest goes quiet.'); S.banner = { text: '👑 Troll King slain!', life: 4 }; shake(0.6, 8); for (let i = 0; i < 4; i++) S.drops.push({ x: m.x + rnd(-1, 1), y: m.y + rnd(-1, 1), kind: ['gold', 'gold', 'heart', 'wood'][i], life: 40 }); }
+    if (MOBS[m.type].boss) { S.kings = (S.kings || 0) + 1; log('👑 The Troll King has fallen! The forest goes quiet.'); S.banner = { text: '👑 Troll King slain!', life: 4 }; shake(0.6, 8); for (let i = 0; i < 4; i++) S.drops.push({ x: m.x + rnd(-1, 1), y: m.y + rnd(-1, 1), kind: ['gold', 'gold', 'heart', 'wood'][i], life: 40 }); }
     if (Math.random() < 0.25) { const kinds = ['wood', 'food', 'gold', 'heart']; S.drops.push({ x: m.x, y: m.y, kind: kinds[Math.floor(Math.random() * kinds.length)], life: 30 }); }
     if (S.kills % 10 === 0) { const h = S.hero; h.maxhp = heroMaxHp(); h.hp = Math.min(h.maxhp, h.hp + 30); log(`🤠 The Mayor reached level ${heroLevel()}! Shots do ${heroDmg()}.`); }
     if (selected && selected.kind === 'mob' && selected.id === m.id) selected = null;
@@ -369,6 +375,7 @@ function updateMob(m, dt) {
     if (MOBS[m.type].hunts && da < 7) {          // goblins chase whoever shot them
       const step = m.spd * dt, d = da || 1;
       const bl = stepBlocked(m, (a.x - m.x) / d * step, (a.y - m.y) / d * step, null);
+      m.blocker = null;
       if (bl && bl.type !== 'tree' && m.cd <= 0) { damageBuilding(bl, m.dmg); m.cd = m.rof; }
       else if (bl && bl.type === 'tree' && m.cd <= 0) { damageBuilding(bl, m.dmg * 2); m.cd = m.rof; }
       m.moving = ox !== m.x || oy !== m.y; if (m.moving) m.anim += dt * 8; return;
@@ -377,7 +384,7 @@ function updateMob(m, dt) {
   }
   if (!m.target || !bld(m.target) || m.retarget <= 0) { const t = pickTarget(m); m.target = t ? t.id : null; m.retarget = 3; }
   const tgt = bld(m.target); if (!tgt) return;
-  if (m.blocker && !bld(m.blocker)) m.blocker = null;
+  if (m.blocker && (!bld(m.blocker) || rectDist(m, bld(m.blocker)) > 0.8)) m.blocker = null;
   const atk = bld(m.blocker) || (rectDist(m, tgt) < 0.7 ? tgt : null);
   const def = MOBS[m.type];
   if (def.ranged && rectDist(m, tgt) <= def.ranged && !(atk && atk.type === 'tree')) {   // shaman lobs fire from a distance
@@ -422,10 +429,13 @@ function updateProj(p, dt) {
     if (moveToward(p, p.tx, p.ty, p.spd, dt)) { const b = bld(p.tb); if (b) { damageBuilding(b, p.dmg); burst(p.x, p.y, 8, '#ff7030'); } return false; }
     return true;
   }
-  p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt;               // bullet
-  if (p.life <= 0 || p.x < 0 || p.y < 0 || p.x > COLS || p.y > ROWS) return false;
-  const m = S.mobs.find(x => dist(p, x) < MOBS[x.type].r); if (m) { damageMob(m, p.dmg, S.hero); burst(m.x, m.y - 0.3, 3, '#ffe070'); return false; }
-  return true;
+  const n = Math.max(1, Math.ceil(Math.hypot(p.vx, p.vy) * dt / 0.25));   // bullet: sub-step so fast shots cannot skip over small mobs
+  for (let i = 0; i < n; i++) {
+    p.x += p.vx * dt / n; p.y += p.vy * dt / n;
+    const m = S.mobs.find(x => dist(p, x) < MOBS[x.type].r); if (m) { damageMob(m, p.dmg, S.hero); burst(m.x, m.y - 0.3, 3, '#ffe070'); return false; }
+  }
+  p.life -= dt;
+  return !(p.life <= 0 || p.x < 0 || p.y < 0 || p.x > COLS || p.y > ROWS);
 }
 function updateBarracks(b, dt) {
   b.trainCd -= dt;
@@ -450,7 +460,7 @@ function updateSoldier(s, dt) {
     if (dist(s, m) <= 0.9) { if (s.cd <= 0) { damageMob(m, 8, s); s.cd = 0.6; } }
     else moveToward(s, m.x, m.y, 2.4, dt);
   } else {
-    const h = bld(s.home) || S.buildings.find(b => b.type === 'hall');
+    const h = bld(s.home) || hall();
     if (h) { const p = door(h); if (dist(s, p) > 1.2) moveToward(s, p.x, p.y, 2, dt); }
     if (!isNight()) s.hp = clamp(s.hp + 3 * dt, 0, s.maxhp);
   }
@@ -465,6 +475,15 @@ function buyUpgrade(k) {
   const c = upCost(k); if (S.res.gold < c) return toast(`Needs 🪙${c}`);
   S.res.gold -= c; S.up[k]++; S.hero.maxhp = heroMaxHp(); if (k === 'vest') S.hero.hp += 40;
   log(`${u.name} → level ${S.up[k]}.`); blip(700, 0.1);
+}
+function freeTileNear(x, y) {   // nearest unoccupied tile centre, searching outward in rings
+  for (let r = 0; r < 8; r++) for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+    if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+    const tx = Math.floor(x) + dx, ty = Math.floor(y) + dy;
+    if (tx < 0 || ty < 0 || tx >= COLS || ty >= ROWS || grid[ty][tx]) continue;
+    return { x: tx + 0.5, y: ty + 0.5 };
+  }
+  return null;
 }
 function warCry() {
   const h = S.hero; if (h.dead > 0 || h.cry > 0) return;
@@ -484,7 +503,11 @@ function updateHero(dt) {
   const h = S.hero;
   if (h.dead > 0) {
     h.dead -= dt;
-    if (h.dead <= 0) { const hall = S.buildings.find(b => b.type === 'hall'); const p = door(hall); h.x = p.x; h.y = p.y; h.hp = h.maxhp; log('🤠 The Mayor is back on their feet.'); }
+    if (h.dead <= 0) {
+      const th = hall(); if (!th) { h.dead = 1; return; }
+      const p = door(th), spot = freeTileNear(p.x, p.y) || p;
+      h.x = spot.x; h.y = spot.y; h.hp = h.maxhp; log('🤠 The Mayor is back on their feet.');
+    }
     return;
   }
   h.cd -= dt; h.cry = Math.max(0, h.cry - dt); h.cryFx = Math.max(0, h.cryFx - dt); h.flash = Math.max(0, (h.flash || 0) - dt);
@@ -553,7 +576,8 @@ function update(dt) {
   if (S.res.food < 1 && !S.foodWarned) { S.foodWarned = true; log('⚠️ The granary is empty! Hungry villagers work slowly. Build more farms.'); S.banner = { text: '⚠️ Out of food — build more farms!', life: 3 }; }
   else if (S.res.food > 15) S.foodWarned = false;
   for (const v of S.villagers) updateVillager(v, dt);
-  for (const b of S.buildings.slice()) { if (b.type === 'tower') updateTower(b, dt); else if (b.type === 'barracks') updateBarracks(b, dt); }
+  for (const b of ofType('tower').slice()) updateTower(b, dt);
+  for (const b of ofType('barracks').slice()) updateBarracks(b, dt);
   for (const m of S.mobs.slice()) updateMob(m, dt);
   S.projs = S.projs.filter(p => updateProj(p, dt));
   for (const s of S.soldiers.slice()) updateSoldier(s, dt);
@@ -766,7 +790,7 @@ function buildSprites() {
 const ground = document.createElement('canvas'); ground.width = COLS * PX; ground.height = ROWS * PX;
 const gctx = ground.getContext('2d');
 function paintGround() {
-  const hall = S.buildings.find(b => b.type === 'hall'); const c = hall ? center(hall) : { x: COLS / 2, y: ROWS / 2 };
+  const th = hall(); const c = th ? center(th) : { x: COLS / 2, y: ROWS / 2 };
   for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) {
     const d = Math.hypot(x + 0.5 - c.x, y + 0.5 - c.y);
     const dirt = d < 5.5 + Math.sin(x * 1.7) * 0.8 + Math.cos(y * 2.1) * 0.8;
@@ -792,6 +816,7 @@ function paintDirt(b) {
 const canvas = $('#c'), ctx = canvas.getContext('2d');
 const mini = $('#mini'), mctx = mini.getContext('2d');
 const dark = document.createElement('canvas'); const dctx = dark.getContext('2d');
+const miniBase = document.createElement('canvas'); miniBase.width = 128; miniBase.height = 96; const mbctx = miniBase.getContext('2d');
 function resize() { const st = $('#stage'); canvas.width = st.clientWidth; canvas.height = st.clientHeight; dark.width = canvas.width; dark.height = canvas.height; }
 window.addEventListener('resize', resize);
 const W2S = (wx, wy) => [Math.round((wx - cam.x) * TS + canvas.width / 2), Math.round((wy - cam.y) * TS + canvas.height / 2)];
@@ -846,8 +871,8 @@ function draw() {
     }
   }
   // tower ranges while mobs are about
-  if (S.mobs.length) for (const b of S.buildings) if (b.type === 'tower' && b.gx >= x0 - 5 && b.gx <= x1 + 5 && b.gy >= y0 - 5 && b.gy <= y1 + 5) {
-    const c = center(b); const [sx, sy] = W2S(c.x, c.y); ctx.strokeStyle = 'rgba(120,160,255,.15)'; ctx.beginPath(); ctx.arc(sx, sy, DEFS.tower.range * TS, 0, Math.PI * 2); ctx.stroke();
+  if (S.mobs.length) for (const b of ofType('tower')) if (b.gx >= x0 - 5 && b.gx <= x1 + 5 && b.gy >= y0 - 5 && b.gy <= y1 + 5) {
+    const c = center(b); const [sx, sy] = W2S(c.x, c.y); ctx.strokeStyle = 'rgba(120,160,255,.15)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(sx, sy, DEFS.tower.range * TS, 0, Math.PI * 2); ctx.stroke();
   }
   // drops on the ground
   for (const d of S.drops) { const bob = Math.sin(performance.now() / 200 + d.x) * 3; const [sx, sy] = W2S(d.x, d.y); if (d.life < 5 && Math.floor(d.life * 6) % 2) continue; ctx.drawImage(SPR.drop[d.kind], sx - 24, sy - 30 + bob, 48, 48); }
@@ -900,13 +925,13 @@ function draw() {
     dctx.fillStyle = `rgba(8,12,40,${dk})`; dctx.fillRect(0, 0, dark.width, dark.height);
     dctx.globalCompositeOperation = 'destination-out';
     if (S.hero.dead <= 0) light(S.hero.x, S.hero.y, 5 * TS, 0.9);
-    for (const b of S.buildings) if (b.type === 'hall' || b.type === 'tower' || b.type === 'tavern' || b.type === 'house') {
+    for (const t of ['hall', 'tower', 'tavern', 'house']) for (const b of ofType(t)) {
       const c = center(b); if (c.x < x0 - 6 || c.x > x1 + 6 || c.y < y0 - 6 || c.y > y1 + 6) continue;
       light(c.x, c.y, (b.type === 'hall' ? 6 : b.type === 'house' ? 2.5 : 4) * TS, b.type === 'house' ? 0.5 : 0.8);
     }
     ctx.drawImage(dark, 0, 0);
     ctx.globalCompositeOperation = 'lighter';
-    for (const b of S.buildings) if (b.type === 'hall' || b.type === 'tower' || b.type === 'tavern') {
+    for (const t of ['hall', 'tower', 'tavern']) for (const b of ofType(t)) {
       const c = center(b); const [sx, sy] = W2S(c.x, c.y); const r = 2.5 * TS;
       if (sx < -r || sx > canvas.width + r || sy < -r || sy > canvas.height + r) continue;
       const g = ctx.createRadialGradient(sx, sy, 2, sx, sy, r); g.addColorStop(0, `rgba(255,170,60,${0.25 * dk})`); g.addColorStop(1, 'rgba(255,170,60,0)');
@@ -931,8 +956,11 @@ function draw() {
 }
 function drawMini(vw, vh) {
   const k = mini.width / COLS;
-  mctx.fillStyle = '#3f7a2c'; mctx.fillRect(0, 0, mini.width, mini.height);
-  for (const b of S.buildings) { mctx.fillStyle = DEFS[b.type].mini; mctx.fillRect(b.gx * k, b.gy * k, b.w * k, b.h * k); }
+  if (miniDirty) {
+    miniDirty = false; mbctx.fillStyle = '#3f7a2c'; mbctx.fillRect(0, 0, mini.width, mini.height);
+    for (const b of S.buildings) { mbctx.fillStyle = DEFS[b.type].mini; mbctx.fillRect(b.gx * k, b.gy * k, b.w * k, b.h * k); }
+  }
+  mctx.drawImage(miniBase, 0, 0);
   mctx.fillStyle = '#fff'; for (const v of S.villagers) mctx.fillRect(v.x * k - 1, v.y * k - 1, 2, 2);
   mctx.fillStyle = '#80c0ff'; for (const s of S.soldiers) mctx.fillRect(s.x * k - 1, s.y * k - 1, 2, 2);
   mctx.fillStyle = '#ff4040'; for (const m of S.mobs) mctx.fillRect(m.x * k - 1.5, m.y * k - 1.5, 3, 3);
@@ -975,7 +1003,7 @@ function updateUI() {
   for (const k in UPGRADES) { const u = UPGRADES[k], btn = $('#up-' + k); const maxed = S.up[k] >= u.max; btn.disabled = maxed || S.res.gold < upCost(k); btn.querySelector('.n').textContent = `${u.name} ${'★'.repeat(S.up[k])}`; btn.querySelector('small').textContent = maxed ? 'max level' : `${u.desc} · 🪙${upCost(k)}`; }
   $('#log').innerHTML = S.log.slice(0, 12).map(m => `<div>${m}</div>`).join('');
   const open = QUESTS.filter(q => !S.done.includes(q.id)).slice(0, 3);
-  $('#quests').innerHTML = (open.map(q => `<div>☐ ${q.text} <small>${costStr(q.reward) || `🍞${q.reward.food}`}</small></div>`).join('') || '<div>🏆 Every quest complete!</div>') + `<div class="m">${S.done.length}/${QUESTS.length} done</div>`;
+  $('#quests').innerHTML = (open.map(q => `<div>☐ ${q.text} <small>${costStr(q.reward)}</small></div>`).join('') || '<div>🏆 Every quest complete!</div>') + `<div class="m">${S.done.length}/${QUESTS.length} done</div>`;
   $('#sel').innerHTML = selectionHTML();
 }
 function needBar(label, val) { return `<div class="need"><span>${label}</span><div class="b"><i class="${val < 30 ? 'low' : ''}" style="width:${val}%"></i></div></div>`; }
@@ -1001,7 +1029,7 @@ function selectionHTML() {
   }
   if (selected.kind === 'mob') {
     const m = mob(selected.id); if (!m) { selected = null; return selectionHTML(); }
-    const tip = { goblin: 'Fast and weak. Goes for farms and houses, and chases whoever shoots it.', orc: 'Tough bruiser. Smashes whatever is closest.', troll: 'Huge. Heads straight for towers and the Town Hall.', shaman: 'Lobs fire at buildings from 4 tiles away. Kill it first.', bomber: 'Sprints at walls and towers and explodes. Shoot it before it arrives.' }[m.type];
+    const tip = { goblin: 'Fast and weak. Goes for farms and houses, and chases whoever shoots it.', orc: 'Tough bruiser. Smashes whatever is closest.', troll: 'Huge. Heads straight for towers and the Town Hall.', shaman: 'Lobs fire at buildings from 4 tiles away. Kill it first.', bomber: 'Sprints at walls and towers and explodes. Shoot it before it arrives.', king: 'The boss. Enormous health, crushing blows, heads for your towers and Town Hall. Kite it with dash and War Cry.' }[m.type];
     return `<div class="t">${MOBS[m.type].name}</div><div class="m">HP ${Math.ceil(m.hp)}/${m.maxhp} · hits for ${Math.round(m.dmg)}</div><div class="m" style="margin-top:6px">${tip}</div>`;
   }
   return '';
@@ -1019,7 +1047,7 @@ canvas.addEventListener('pointerdown', e => {
   if (!S || S.over) return;
   e.preventDefault(); mouseW = pointerWorld(e); hover = { x: Math.floor(mouseW.x), y: Math.floor(mouseW.y) };
   if (e.button !== 0) return;                                 // right button handled in contextmenu
-  if (buildSel) { tryBuild(buildSel, hover.x, hover.y); if (DEFS[buildSel].w === 1) painting = true; if (!e.shiftKey && buildSel !== 'wall') selectBuild(null); updateUI(); return; }
+  if (buildSel) { tryBuild(buildSel, hover.x, hover.y); if (buildSel === 'wall') painting = true; if (!e.shiftKey && buildSel !== 'wall') selectBuild(null); updateUI(); return; }
   if (demolish) { const b = tileAt(hover.x + 0.5, hover.y + 0.5); if (b) demolishBuilding(b); updateUI(); return; }
   firing = true; fireAt(mouseW.x, mouseW.y);
 });
@@ -1050,7 +1078,7 @@ document.addEventListener('keydown', e => {
   updateUI();
 });
 document.addEventListener('keyup', e => { keys[keyName(e)] = false; });
-window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; firing = false; });
+window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; firing = false; painting = false; });
 // on-screen controls for touch devices
 (function touchSetup() {
   const coarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
@@ -1078,7 +1106,7 @@ for (const k in UPGRADES) $('#up-' + k).onclick = () => { buyUpgrade(k); updateU
 for (const b of document.querySelectorAll('#diff button')) b.onclick = () => { chosenDiff = b.dataset.diff; for (const o of document.querySelectorAll('#diff button')) o.classList.toggle('on', o === b); };
 $('#btn-repair').onclick = () => { repairAll(); updateUI(); };
 $('#btn-demolish').onclick = () => { demolish = !demolish; buildSel = null; updateUI(); };
-$('#btn-new').onclick = () => { if (confirm('Abandon this town and start over?')) { localStorage.removeItem(SAVE_KEY); startGame(true); } };
+$('#btn-new').onclick = () => { if (confirm('Abandon this town and start over?')) { try { localStorage.removeItem(SAVE_KEY); } catch (e) { /* ignore */ } startGame(true); } };
 $('#btn-start').onclick = () => startGame(true);
 $('#btn-continue').onclick = () => startGame(false);
 $('#btn-again').onclick = () => { $('#gameover').hidden = true; startGame(true); };
