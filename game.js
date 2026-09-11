@@ -131,13 +131,14 @@ function newState() {
   };
   S.diff = chosenDiff; rebuildGrid();
   addBuilding('hall', hx, hy);
-  // forest: sparse near town, dense at the edges
   const c = { x: hx + 1, y: hy + 1 };
+  carveRoads(c.x, c.y);
+  // forest: sparse near town, dense at the edges
   for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) {
     const d = Math.hypot(x + 0.5 - c.x, y + 0.5 - c.y);
     if (d < 9) continue;
     const p = d < 15 ? 0.08 : d < 22 ? 0.2 : 0.34;
-    if (Math.random() < p && canPlace('tree', x, y)) addBuilding('tree', x, y);
+    if (Math.random() < p && !roadGrid[y][x] && canPlace('tree', x, y)) addBuilding('tree', x, y);
   }
   addVillager(); addVillager();
   cam.x = c.x; cam.y = c.y;
@@ -602,7 +603,7 @@ function load() {
   try {
     const raw = localStorage.getItem(SAVE_KEY); if (!raw) return false;
     const st = JSON.parse(raw); if (!st || st.v !== 2 || st.over) return false;
-    S = st; S.done = S.done || []; S.chopped = S.chopped || 0; S.questT = 0; S.up = S.up || { gun: 0, vest: 0, boots: 0 }; S.drops = S.drops || []; S.parts = []; S.diff = S.diff || 'normal'; rebuildGrid(); cam.x = S.hero.x; cam.y = S.hero.y; paintGround(); return true;
+    S = st; roadsFromSave(); S.done = S.done || []; S.chopped = S.chopped || 0; S.questT = 0; S.up = S.up || { gun: 0, vest: 0, boots: 0 }; S.drops = S.drops || []; S.parts = []; S.diff = S.diff || 'normal'; rebuildGrid(); cam.x = S.hero.x; cam.y = S.hero.y; paintGround(); return true;
   } catch (e) { return false; }
 }
 function hasSave() { try { const r = localStorage.getItem(SAVE_KEY); if (!r) return false; const s = JSON.parse(r); return s && s.v === 2 && !s.over; } catch (e) { return false; } }
@@ -686,6 +687,16 @@ function buildSprites() {
       P(g, x, y, '#4a7a34'); P(g, x, y - 1, '#5a8a3c'); P(g, x + 1, y, '#3f6a2c'); P(g, x + 1, y - 2, '#5a8a3c'); }
     if (i === 5) { const x = Math.floor(rnd(2, 11)), y = Math.floor(rnd(4, 12));    // crack
       for (let k = 0; k < 5; k++) P(g, x + k, y + (k % 3 === 1 ? 1 : 0), shade(c, 0.74)); }
+  }));
+  SPR.road = [0, 1, 2].map(i => mk(PX, PX, g => {
+    const c = '#9a7050';
+    R(g, 0, 0, PX, PX, c);
+    for (let k = 0; k < 16; k++) P(g, Math.floor(rnd(0, PX)), Math.floor(rnd(0, PX)), shade(c, 0.9));
+    for (let k = 0; k < 10; k++) P(g, Math.floor(rnd(0, PX)), Math.floor(rnd(0, PX)), shade(c, 1.12));
+    for (let k = 0; k < 4; k++) { const x = Math.floor(rnd(0, PX)), y = Math.floor(rnd(0, PX)); P(g, x, y, '#b8a894'); P(g, x, y + 1, shade(c, 0.78)); }
+    if (i === 0) for (let x = 0; x < PX; x++) { P(g, x, 5, shade(c, 0.82)); P(g, x, 11, shade(c, 0.82)); }
+    if (i === 1) for (let y = 0; y < PX; y++) { P(g, 5, y, shade(c, 0.82)); P(g, 11, y, shade(c, 0.82)); }
+    if (i === 2) for (let k = 0; k < 6; k++) P(g, Math.floor(rnd(0, PX)), Math.floor(rnd(0, PX)), shade(c, 0.84));
   }));
   SPR.tree = [0, 1, 2].map(v => mk(PX, 24, g => {
     const col = ['#2f6b34', '#35743a', '#2a6230'][v];
@@ -804,7 +815,7 @@ const ground = document.createElement('canvas'); ground.width = COLS * PX; groun
 const gctx = ground.getContext('2d');
 const tileBuf = document.createElement('canvas'); tileBuf.width = PX; tileBuf.height = PX;
 const tbx = tileBuf.getContext('2d');
-let dirtGrid = null;
+let dirtGrid = null, roadGrid = null;
 const maskCache = new Map(), rimCache = new Map();
 const C = (g, x, y, w, h) => g.clearRect(x, y, w, h);
 function dirtMask(code, variant) {
@@ -847,6 +858,33 @@ function dirtRim(code, variant) {
   });
   rimCache.set(key, r); return r;
 }
+// Roads: a few tracks wandering out of town to the map edge. They count as dirt
+// for the edge masks, so they blend into clearings, but render as paler, rutted,
+// gravelly ground.
+function blankRoads() { roadGrid = Array.from({ length: ROWS }, () => new Uint8Array(COLS)); }
+function carveRoads(cx, cy) {
+  blankRoads();
+  const dirs = [0, 1, 2, 3].sort(() => Math.random() - 0.5).slice(0, 3);
+  for (const d of dirs) {
+    let a = d * Math.PI / 2 + rnd(-0.35, 0.35), x = cx, y = cy;
+    for (let i = 0; i < 110; i++) {
+      a += rnd(-0.16, 0.16); x += Math.cos(a); y += Math.sin(a);
+      if (x < -1 || y < -1 || x > COLS || y > ROWS) break;
+      const tx = Math.floor(x), ty = Math.floor(y);
+      for (let oy = 0; oy <= 1; oy++) for (let ox = 0; ox <= 1; ox++) {
+        const px = tx + ox, py = ty + oy;
+        if (px >= 0 && py >= 0 && px < COLS && py < ROWS) roadGrid[py][px] = 1;
+      }
+    }
+  }
+  let str = '';
+  for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) str += roadGrid[y][x] ? '1' : '0';
+  S.roads = str;
+}
+function roadsFromSave() {
+  blankRoads(); const str = S.roads; if (!str || str.length !== ROWS * COLS) return;
+  for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) roadGrid[y][x] = str.charCodeAt(y * COLS + x) === 49 ? 1 : 0;
+}
 const isDirt = (x, y) => (x < 0 || y < 0 || x >= COLS || y >= ROWS) ? 1 : dirtGrid[y][x];
 const hash2 = (x, y) => (((x * 73856093) ^ (y * 19349663) ^ ((x + y) * 83492791)) >>> 0);
 function paintTile(x, y) {
@@ -860,7 +898,11 @@ function paintTile(x, y) {
   const code = isDirt(x, y - 1) | (isDirt(x + 1, y) << 1) | (isDirt(x, y + 1) << 2) | (isDirt(x - 1, y) << 3) |
     (isDirt(x + 1, y - 1) << 4) | (isDirt(x + 1, y + 1) << 5) | (isDirt(x - 1, y + 1) << 6) | (isDirt(x - 1, y - 1) << 7);
   tbx.globalCompositeOperation = 'source-over'; tbx.clearRect(0, 0, PX, PX);
-  tbx.drawImage(SPR.dirt[(hash2(y, x) >>> 3) % 6], 0, 0);
+  if (roadGrid[y][x]) {   // ruts follow the direction the road actually runs, so they join up across tiles
+    const isR = (a, b) => (a < 0 || b < 0 || a >= COLS || b >= ROWS) ? 0 : roadGrid[b][a];
+    const hz = isR(x - 1, y) + isR(x + 1, y), vt = isR(x, y - 1) + isR(x, y + 1);
+    tbx.drawImage(SPR.road[hz > vt ? 0 : vt > hz ? 1 : 2], 0, 0);
+  } else tbx.drawImage(SPR.dirt[(hash2(y, x) >>> 3) % 6], 0, 0);
   const variant = (hash2(x, y) >>> 5) % 4;
   tbx.globalCompositeOperation = 'destination-in';
   tbx.drawImage(dirtMask(code, variant), 0, 0);
@@ -885,10 +927,11 @@ function markDirt(b, repaint = true) {
 }
 function paintGround() {
   dirtGrid = Array.from({ length: ROWS }, () => new Uint8Array(COLS));
+  if (!roadGrid) blankRoads();
   const th = hall(); const c = th ? center(th) : { x: COLS / 2, y: ROWS / 2 };
   for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) {
     const d = Math.hypot(x + 0.5 - c.x, y + 0.5 - c.y);
-    if (d < 5.5 + Math.sin(x * 1.7) * 0.8 + Math.cos(y * 2.1) * 0.8) dirtGrid[y][x] = 1;
+    if (roadGrid[y][x] || d < 5.5 + Math.sin(x * 1.7) * 0.8 + Math.cos(y * 2.1) * 0.8) dirtGrid[y][x] = 1;
   }
   for (const b of S.buildings) if (!DEFS[b.type].tree) markDirt(b, false);
   repaintRegion(0, 0, COLS - 1, ROWS - 1);
@@ -1040,6 +1083,7 @@ function drawMini(vw, vh) {
   const k = mini.width / COLS;
   if (miniDirty) {
     miniDirty = false; mbctx.fillStyle = '#3f7a2c'; mbctx.fillRect(0, 0, mini.width, mini.height);
+    if (roadGrid) { mbctx.fillStyle = '#8a6a50'; for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) if (roadGrid[y][x]) mbctx.fillRect(x * k, y * k, k, k); }
     for (const b of S.buildings) { mbctx.fillStyle = DEFS[b.type].mini; mbctx.fillRect(b.gx * k, b.gy * k, b.w * k, b.h * k); }
   }
   mctx.drawImage(miniBase, 0, 0);
