@@ -816,13 +816,43 @@ function buildSprites() {
     R(g, 10, 1, 12, 2, '#e8c040'); P(g, 10, 0, '#e8c040'); P(g, 13, 0, '#e8c040'); P(g, 16, 0, '#e8c040'); P(g, 19, 0, '#e8c040'); P(g, 21, 0, '#e8c040'); P(g, 15, 1, '#ff3060');
     R(g, 27, 4, 4, 18, '#5a3a1a'); R(g, 26, 2, 6, 4, '#7a5a3a'); P(g, 28, 3, '#9a7a5a');
   }));
+  SPR.prop = [
+    mk(PX, 14, g => {   // boulder
+      R(g, 3, 6, 10, 7, '#8a8a94'); R(g, 4, 4, 8, 2, '#9a9aa4'); R(g, 6, 3, 4, 1, '#a6a6b0');
+      R(g, 3, 11, 10, 2, '#6a6a74'); P(g, 5, 6, '#b0b0ba'); P(g, 6, 5, '#b0b0ba'); P(g, 10, 8, '#76767f');
+      P(g, 4, 8, '#4a7a34'); P(g, 12, 10, '#4a7a34');
+    }),
+    mk(PX, 12, g => {   // stacked logs
+      for (let i = 0; i < 3; i++) { R(g, 2, 7 - i * 3, 12, 3, '#8a6a48'); R(g, 2, 7 - i * 3, 12, 1, '#a37a52'); P(g, 3, 8 - i * 3, '#6a4a2a'); }
+      R(g, 1, 4, 1, 6, '#5a3a22'); R(g, 14, 4, 1, 6, '#5a3a22');
+      P(g, 3, 2, '#c49a6a'); P(g, 3, 3, '#b08a5a');
+    }),
+    mk(PX, 13, g => {   // bush
+      R(g, 3, 6, 10, 6, '#3f7a34'); R(g, 4, 4, 8, 2, '#478438'); R(g, 6, 3, 4, 1, '#4f8e3e');
+      P(g, 5, 5, '#5a9a4a'); P(g, 10, 7, '#5a9a4a'); P(g, 7, 4, '#5a9a4a');
+      P(g, 6, 8, '#c04040'); P(g, 11, 6, '#c04040'); R(g, 3, 12, 10, 1, '#2f6b2c');
+    }),
+    mk(PX, 9, g => {    // stump with rings
+      R(g, 4, 3, 8, 5, '#6a4a2a'); R(g, 4, 2, 8, 1, '#8a6a48'); R(g, 6, 2, 4, 1, '#a3855e');
+      P(g, 7, 2, '#6a4a2a'); P(g, 8, 2, '#6a4a2a'); R(g, 4, 8, 8, 1, '#4a3320');
+      P(g, 3, 6, '#4a7a34'); P(g, 12, 5, '#4a7a34');
+    }),
+    mk(PX, 8, g => {    // mushroom cluster
+      R(g, 5, 4, 3, 3, '#e8d8c0'); R(g, 4, 2, 5, 2, '#c04838'); P(g, 5, 2, '#e06858'); P(g, 7, 3, '#f0e8d8');
+      R(g, 10, 5, 2, 2, '#e8d8c0'); R(g, 9, 4, 4, 1, '#c04838'); P(g, 10, 4, '#e06858');
+      R(g, 3, 7, 10, 1, 'rgba(0,0,0,.18)');
+    }),
+    mk(PX, 12, g => {   // fern
+      for (const [x, h] of [[4, 6], [8, 8], [11, 5], [6, 7]]) { for (let i = 0; i < h; i++) P(g, x + (i % 2), 11 - i, i > h - 3 ? '#5a9a4a' : '#3f7a34'); P(g, x - 1, 11 - h + 1, '#478438'); }
+    }),
+  ];
   SPR.arrow = mk(4, 2, g => { R(g, 0, 0, 4, 1, '#d8c8a0'); P(g, 3, 0, '#e8e8f0'); });
   SPR.bullet = mk(4, 2, g => { R(g, 0, 0, 3, 2, '#ffe070'); P(g, 3, 0, '#fff8d0'); });
 }
 
 function buildShadows() {
   SHADOW.map = new Map();
-  for (const t of ['house', 'farm', 'mill', 'mine', 'wall', 'tower', 'barracks', 'tavern', 'hall', 'tree']) {
+  for (const t of ['house', 'farm', 'mill', 'mine', 'wall', 'tower', 'barracks', 'tavern', 'hall', 'tree', 'prop']) {
     const sp = SPR[t];
     for (const img of Array.isArray(sp) ? sp : [sp]) SHADOW.map.set(img, silhouette(img));
   }
@@ -1025,12 +1055,21 @@ function draw() {
   // depth-sorted world objects
   const items = [];
   for (const b of S.buildings) if (b.gx + b.w > x0 && b.gx < x1 && b.gy + b.h > y0 - 1 && b.gy < y1) items.push({ y: b.gy + b.h, b });
+  for (let y = Math.max(0, y0); y < y1; y++) for (let x = Math.max(0, x0); x < x1; x++) {
+    if (grid[y][x] || roadGrid[y][x]) continue;
+    const h = hash2(x * 3 + 1, y * 5 + 2);
+    if (h % 100 >= 5) continue;
+    const img = SPR.prop[(h >>> 7) % SPR.prop.length];
+    if (dirtGrid[y][x] && (h >>> 11) % 3) continue;   // clearings stay mostly swept
+    items.push({ y: y + 1, prop: img, px: x + 0.5 + ((h >>> 13) % 5 - 2) / 10, py: y + 0.9 });
+  }
   for (const v of S.villagers) if (v.state !== 'sleeping') items.push({ y: v.y, e: v, kind: 'villager' });
   for (const s of S.soldiers) items.push({ y: s.y, e: s, kind: 'soldier' });
   for (const m of S.mobs) items.push({ y: m.y, e: m, kind: m.type });
   if (S.hero.dead <= 0) items.push({ y: S.hero.y, e: S.hero, kind: 'hero' });
   items.sort((a, b) => a.y - b.y);
   for (const it of items) {
+    if (it.prop) { castShadow(it.prop, it.px, it.py, 0.2); spr(it.prop, it.px, it.py, it.prop.width, it.prop.height, false); continue; }
     if (it.b) {
       const b = it.b, sp = SPR[b.type], img = Array.isArray(sp) ? sp[b.v % sp.length] : sp;
       castShadow(img, b.gx + b.w / 2, b.gy + b.h, b.type === 'tree' ? 0.22 : 0.26);
