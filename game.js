@@ -105,9 +105,9 @@ function canAfford(cost) { return Object.keys(cost).every(k => S.res[k] >= cost[
 function pay(cost) { for (const k in cost) S.res[k] -= cost[k]; }
 function costStr(cost) {
   const parts = [];
-  if (cost.wood) parts.push(`🪵${cost.wood}`);
-  if (cost.gold) parts.push(`🪙${cost.gold}`);
-  if (cost.food) parts.push(`🍞${cost.food}`);
+  if (cost.wood) parts.push(`<i class="r w"></i>${cost.wood}`);
+  if (cost.gold) parts.push(`<i class="r g"></i>${cost.gold}`);
+  if (cost.food) parts.push(`<i class="r f"></i>${cost.food}`);
   return parts.join(' ') || 'free';
 }
 const tileAt = (x, y) => (x < 0 || y < 0 || x >= COLS || y >= ROWS) ? null : grid[Math.floor(y)][Math.floor(x)];
@@ -209,7 +209,7 @@ function removeBuilding(b, reason) {
 function damageBuilding(b, dmg) { b.hp -= dmg; b.flash = performance.now() + 110; if (b.hp <= 0) removeBuilding(b, 'destroyed'); }
 function demolishBuilding(b) {
   if (b.type === 'hall') return toast('You cannot demolish the Town Hall');
-  if (b.type === 'tree') { S.res.wood += 6; S.chopped = (S.chopped || 0) + 1; fx(b.gx + 0.5, b.gy + 0.3, '+🪵6', '#e8c060'); burst(b.gx + 0.5, b.gy + 0.5, 8, '#3a8a3a'); removeBuilding(b, 'chopped'); blip(300, 0.05); return; }
+  if (b.type === 'tree') { S.res.wood += 6; S.chopped = (S.chopped || 0) + 1; fx(b.gx + 0.5, b.gy + 0.3, '+6 wood', '#e8c060'); burst(b.gx + 0.5, b.gy + 0.5, 8, '#3a8a3a'); removeBuilding(b, 'chopped'); blip(300, 0.05); return; }
   const c = DEFS[b.type].cost; for (const k in c) S.res[k] += Math.floor(c[k] / 2);
   removeBuilding(b, 'demolished'); log(`Demolished a ${DEFS[b.type].name}.`);
 }
@@ -345,7 +345,7 @@ function damageMob(m, dmg, byUnit) {
   if (m.hp <= 0) {
     S.mobs = S.mobs.filter(x => x !== m);
     S.res.gold += MOBS[m.type].gold; S.kills++;
-    fx(m.x, m.y, `+🪙${MOBS[m.type].gold}`, '#f2c14e', 1);
+    fx(m.x, m.y, `+${MOBS[m.type].gold} gold`, '#f2c14e', 1);
     burst(m.x, m.y, MOBS[m.type].boss ? 40 : 10, m.type === 'goblin' || m.type === 'bomber' ? '#5aa040' : m.type === 'shaman' ? '#a060c0' : '#7a8a7a');
     if (MOBS[m.type].boss) { S.kings = (S.kings || 0) + 1; log('👑 The Troll King has fallen! The forest goes quiet.'); S.banner = { text: '👑 Troll King slain!', life: 4 }; shake(0.6, 8); for (let i = 0; i < 4; i++) S.drops.push({ x: m.x + rnd(-1, 1), y: m.y + rnd(-1, 1), kind: ['gold', 'gold', 'heart', 'wood'][i], life: 40 }); }
     if (Math.random() < 0.25) { const kinds = ['wood', 'food', 'gold', 'heart']; S.drops.push({ x: m.x, y: m.y, kind: kinds[Math.floor(Math.random() * kinds.length)], life: 30 }); }
@@ -527,9 +527,9 @@ function updateHero(dt) {
   if (!isNight() || !nearestMob(h, 6)) h.hp = clamp(h.hp + 2 * dt, 0, h.maxhp);
   for (const d of S.drops) if (dist(h, d) < 0.7) {
     d.life = 0;
-    if (d.kind === 'wood') { S.res.wood += 10; fx(h.x, h.y - 0.8, '+🪵10', '#e8c060'); }
-    else if (d.kind === 'food') { S.res.food += 10; fx(h.x, h.y - 0.8, '+🍞10', '#f0d060'); }
-    else if (d.kind === 'gold') { S.res.gold += 10; fx(h.x, h.y - 0.8, '+🪙10', '#f2c14e'); }
+    if (d.kind === 'wood') { S.res.wood += 10; fx(h.x, h.y - 0.8, '+10 wood', '#e8c060'); }
+    else if (d.kind === 'food') { S.res.food += 10; fx(h.x, h.y - 0.8, '+10 food', '#f0d060'); }
+    else if (d.kind === 'gold') { S.res.gold += 10; fx(h.x, h.y - 0.8, '+10 gold', '#f2c14e'); }
     else { h.hp = Math.min(h.maxhp, h.hp + 30); fx(h.x, h.y - 0.8, '+30 HP', '#ff6080'); }
     blip(1200, 0.05);
   }
@@ -1184,15 +1184,23 @@ function drawMini(vw, vh) {
 }
 
 // ---------------------------------------------------------------- UI (DOM)
+// Icons come straight from the in-game sprites, so the panel and the world
+// always show the same art.
+const iconURL = img => img.toDataURL();
 function buildButtons() {
   const list = $('#build-list'); list.innerHTML = '';
   for (const type of BUILD_ORDER) {
-    const d = DEFS[type], btn = document.createElement('button');
+    const d = DEFS[type], sp = SPR[type], img = Array.isArray(sp) ? sp[0] : sp;
+    const btn = document.createElement('button');
     btn.className = 'bb'; btn.dataset.type = type; btn.title = d.desc;
-    btn.innerHTML = `<span class="n">${d.icon} ${d.name} <kbd>${d.key}</kbd></span><small class="c">${costStr(d.cost)}</small>`;
+    btn.innerHTML = `<img class="ic" src="${iconURL(img)}" alt=""><span class="n">${d.name}<kbd>${d.key}</kbd></span><small class="c">${costStr(d.cost)}</small>`;
     btn.onclick = () => selectBuild(buildSel === type ? null : type);
     list.appendChild(btn);
   }
+  for (const [id, key] of [['i-gold', 'gold'], ['i-wood', 'wood'], ['i-food', 'food']]) {
+    const el = $('#' + id); if (el) el.src = iconURL(SPR.drop[key]);
+  }
+  const h = $('#i-hero'); if (h) h.src = iconURL(SPR.hero[0]);
 }
 function selectBuild(type) { buildSel = type; demolish = false; if (type) selected = null; updateUI(); }
 function updateUI() {
@@ -1208,14 +1216,14 @@ function updateUI() {
   for (const btn of document.querySelectorAll('.bb')) {
     const type = btn.dataset.type, d = DEFS[type], locked = (d.th || 1) > S.thLevel;
     btn.disabled = locked; btn.classList.toggle('sel', buildSel === type);
-    btn.querySelector('.c').innerHTML = locked ? `🔒 Town Hall lv${d.th}` : costStr(d.cost);
+    btn.querySelector('.c').innerHTML = locked ? `Town Hall lv${d.th} needed` : costStr(d.cost);
     btn.querySelector('.c').classList.toggle('no', !locked && !canAfford(d.cost));
   }
   const next = TH_LEVELS[S.thLevel];
-  $('#btn-upgrade').disabled = !next; $('#upgrade-cost').textContent = next ? `lv${S.thLevel + 1}: ${costStr(next.cost)}` : 'max level';
-  const rc = repairCost(); $('#btn-repair').disabled = !rc; $('#repair-cost').textContent = rc ? `🪵${rc}` : 'nothing damaged';
+  $('#btn-upgrade').disabled = !next; $('#upgrade-cost').innerHTML = next ? `lv${S.thLevel + 1}: ${costStr(next.cost)}` : 'max level';
+  const rc = repairCost(); $('#btn-repair').disabled = !rc; $('#repair-cost').innerHTML = rc ? `<i class="r w"></i>${rc}` : 'nothing damaged';
   $('#btn-demolish').classList.toggle('on', demolish);
-  for (const k in UPGRADES) { const u = UPGRADES[k], btn = $('#up-' + k); const maxed = S.up[k] >= u.max; btn.disabled = maxed || S.res.gold < upCost(k); btn.querySelector('.n').textContent = `${u.name} ${'★'.repeat(S.up[k])}`; btn.querySelector('small').textContent = maxed ? 'max level' : `${u.desc} · 🪙${upCost(k)}`; }
+  for (const k in UPGRADES) { const u = UPGRADES[k], btn = $('#up-' + k); const maxed = S.up[k] >= u.max; btn.disabled = maxed || S.res.gold < upCost(k); btn.querySelector('.n').textContent = `${u.name} ${'★'.repeat(S.up[k])}`; btn.querySelector('small').innerHTML = maxed ? 'max level' : `${u.desc} · <i class="r g"></i>${upCost(k)}`; }
   $('#log').innerHTML = S.log.slice(0, 12).map(m => `<div>${m}</div>`).join('');
   const open = QUESTS.filter(q => !S.done.includes(q.id)).slice(0, 3);
   $('#quests').innerHTML = (open.map(q => `<div>☐ ${q.text} <small>${costStr(q.reward)}</small></div>`).join('') || '<div>🏆 Every quest complete!</div>') + `<div class="m">${S.done.length}/${QUESTS.length} done</div>`;
@@ -1350,6 +1358,10 @@ function frame(now) {
   }
   requestAnimationFrame(frame);
 }
-buildSprites(); buildShadows(); buildButtons(); resize();
+buildSprites(); buildShadows();
+document.documentElement.style.setProperty('--ic-wood', `url(${iconURL(SPR.drop.wood)})`);
+document.documentElement.style.setProperty('--ic-gold', `url(${iconURL(SPR.drop.gold)})`);
+document.documentElement.style.setProperty('--ic-food', `url(${iconURL(SPR.drop.food)})`);
+buildButtons(); resize();
 $('#btn-continue').style.display = hasSave() ? '' : 'none';
 requestAnimationFrame(frame);
