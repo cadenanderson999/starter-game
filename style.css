@@ -1,0 +1,64 @@
+:root {
+  --bg: #171a21; --panel: #1f2430; --panel2: #262c3a; --line: #333a4b;
+  --text: #e6e9f0; --muted: #98a0b3; --accent: #f2c14e; --green: #6fcf7a; --red: #ef6b6b;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+  font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+button { font: inherit; color: inherit; background: var(--panel2); border: 1px solid var(--line);
+  border-radius: 8px; padding: 6px 10px; cursor: pointer; }
+button:hover:not(:disabled) { border-color: var(--accent); }
+button:disabled { opacity: .45; cursor: not-allowed; }
+button.on { background: var(--accent); color: #222; border-color: var(--accent); }
+#app { display: flex; flex-direction: column; height: 100%; }
+#top { display: flex; align-items: center; gap: 14px; padding: 8px 14px; background: var(--panel);
+  border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.brand { font-weight: 700; font-size: 16px; margin-right: 6px; }
+.res { background: var(--panel2); padding: 4px 10px; border-radius: 999px; white-space: nowrap; }
+.spacer { flex: 1; }
+#clock { font-weight: 600; white-space: nowrap; }
+.bar { width: 140px; height: 8px; background: var(--panel2); border-radius: 4px; overflow: hidden; }
+#clock-fill { height: 100%; width: 0; background: linear-gradient(90deg, #f7d774 0 62%, #4a5fc1 62%); }
+#speed button { padding: 4px 8px; }
+main { display: flex; flex: 1; min-height: 0; }
+aside { width: 230px; background: var(--panel); padding: 10px; overflow-y: auto; border-right: 1px solid var(--line); }
+#info { border-right: 0; border-left: 1px solid var(--line); }
+aside h3 { margin: 6px 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+#build-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+.bb, .tool { display: flex; flex-direction: column; align-items: flex-start; text-align: left; width: 100%; gap: 2px; }
+.bb .n { font-weight: 600; }
+.bb .n kbd { float: right; }
+.bb small, .tool small { color: var(--muted); font-size: 12px; }
+.bb.sel { border-color: var(--green); background: #253a2b; }
+.bb .no { color: var(--red); }
+.tool { margin-bottom: 6px; }
+.tool.danger { margin-top: 12px; border-color: #5a2b2b; }
+.tool.on { background: #3a2b2b; border-color: var(--red); }
+kbd { background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; font-size: 11px; }
+.hint { color: var(--muted); font-size: 12px; margin-top: 10px; }
+#stage { flex: 1; display: flex; align-items: center; justify-content: center; background: #0f1116; min-width: 0; padding: 8px; }
+canvas { max-width: 100%; max-height: 100%; aspect-ratio: 896 / 640; image-rendering: auto; border-radius: 6px;
+  box-shadow: 0 0 0 1px var(--line), 0 20px 60px #0008; cursor: crosshair; }
+.panel { background: var(--panel2); border-radius: 8px; padding: 8px 10px; margin-bottom: 12px; font-size: 13px; }
+.panel .t { font-weight: 700; font-size: 14px; margin-bottom: 4px; }
+.panel .m { color: var(--muted); }
+.need { display: flex; align-items: center; gap: 6px; margin: 3px 0; }
+.need .b { flex: 1; height: 6px; background: var(--bg); border-radius: 3px; overflow: hidden; }
+.need .b i { display: block; height: 100%; background: var(--green); }
+.need .b i.low { background: var(--red); }
+#log { max-height: 260px; overflow-y: auto; }
+#log div { padding: 2px 0; border-bottom: 1px solid var(--line); color: var(--muted); }
+#log div:first-child { color: var(--text); }
+#gameover[hidden] { display: none; }
+#overlay, #gameover { position: fixed; inset: 0; background: #0b0d12ee; display: flex; align-items: center;
+  justify-content: center; z-index: 10; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 28px 32px; max-width: 560px; }
+.card h1 { margin: 0 0 4px; }
+.card .tag { color: var(--accent); margin-top: 0; font-weight: 600; }
+.card p { color: var(--muted); }
+.card .keys { font-size: 12px; }
+.card .fine { font-size: 12px; margin-bottom: 0; }
+.row { display: flex; gap: 10px; margin: 14px 0; }
+.big { padding: 12px 18px; font-size: 16px; font-weight: 600; }
+#btn-start, #btn-again { background: var(--accent); color: #222; border-color: var(--accent); }
+@media (max-width: 1000px) { aside { width: 190px; } }
