@@ -1458,11 +1458,12 @@ document.addEventListener('keydown', e => {
   const k = e.key, kn = keyName(e); keys[kn] = true;
   if (MOVE_KEYS.includes(kn)) e.preventDefault();
   if (S.over) return;
-  if (k === 'Escape') { selectBuild(null); demolish = false; selected = null; }
+  if (k === 'Escape') { if (!$('#help').hidden) { help(false); } else { selectBuild(null); demolish = false; selected = null; } }
   else if (k === ' ') { e.preventDefault(); setSpeed(paused ? speed : 0); }
   else if (kn === 'x') { demolish = !demolish; buildSel = null; }
   else if (kn === 'r') repairAll();
   else if (kn === 'q') warCry();
+  else if (kn === 'h') help($('#help').hidden);
   else if (kn === 'm') { muted = !muted; try { localStorage.setItem('hollowmere-muted', muted ? '1' : ''); } catch (er) { /* ignore */ } toast(muted ? '🔇 Sound off' : '🔊 Sound on'); }
   else { const t = BUILD_ORDER.find(t => DEFS[t].key === k); if (t) selectBuild(buildSel === t ? null : t); }
   updateUI();
@@ -1497,6 +1498,9 @@ const drawer = name => {
   document.body.classList.remove('show-build', 'show-info');
   if (!on) document.body.classList.add('show-' + name);
 };
+const help = on => { $('#help').hidden = !on; };
+$('#btn-help').onclick = () => help($('#help').hidden);
+$('#btn-help-close').onclick = () => help(false);
 $('#t-build').onclick = () => drawer('build');
 $('#t-info').onclick = () => drawer('info');
 canvas.addEventListener('pointerdown', () => document.body.classList.remove('show-build', 'show-info'));

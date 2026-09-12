@@ -67,8 +67,8 @@ kbd { background: var(--bg); border: 1px solid var(--line); border-radius: 4px; 
 .tbtns button { width: 64px; height: 64px; border-radius: 50%; font-size: 26px; background: #0008; border: 2px solid #fff4; touch-action: none; }
 #log div { padding: 2px 0; border-bottom: 1px solid var(--line); color: var(--muted); }
 #log div:first-child { color: var(--text); }
-#gameover[hidden] { display: none; }
-#overlay, #gameover { position: fixed; inset: 0; background: #100d0aee; display: flex; align-items: center;
+#gameover[hidden], #help[hidden] { display: none; }
+#overlay, #gameover, #help { position: fixed; inset: 0; background: #100d0aee; display: flex; align-items: center;
   justify-content: center; z-index: 10; }
 .card { background: linear-gradient(#271f18, #1c1712); border: 2px solid var(--line); border-radius: 12px; padding: 28px 32px; max-width: 560px; box-shadow: 0 20px 60px #000a; }
 .card h1 { margin: 0 0 4px; }
@@ -109,3 +109,7 @@ kbd { background: var(--bg); border: 1px solid var(--line); border-radius: 4px; 
 #diff > span { color: var(--muted); font-size: 13px; }
 #diff button { padding: 4px 12px; }
 @media (max-width: 620px) { .card .keys { grid-template-columns: repeat(2, 1fr); } #cast img { height: 40px; } }
+
+#btn-help { padding: 3px 10px; font-weight: 700; }
+#help .card { max-width: 470px; }
+#help .card p { font-size: 13px; margin-bottom: 0; }
