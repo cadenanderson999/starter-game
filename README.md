@@ -93,6 +93,18 @@ tower damage. **If the Town Hall falls, the town is lost.**
 | `M` | Mute |
 | `Space` | Pause |
 
+## Put it online
+
+Everything is static, so GitHub Pages can host it as-is:
+
+1. Push this repository to GitHub.
+2. Open the repo's **Settings → Pages**.
+3. Under **Source**, pick **Deploy from a branch**, branch `main`, folder `/ (root)`, and Save.
+
+A minute later the game is live at `https://<your-user>.github.io/starter-game/`. Every path in
+the page is relative, so it works from that subfolder without changes, and the service worker
+caches it for offline play once it has loaded.
+
 ## Balance
 
 Tuned against a scripted run: a fixed build order, and a crude bot that stands by the
